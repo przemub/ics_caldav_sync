@@ -10,6 +10,9 @@ Look no further.
 Install requirements from `requirements.txt` and run `ics_caldav_sync.py` file
 using Python 3.8 or higher.
 
+There exist also `Dockerfile` and `docker-compose.yml` files so you can
+run it on your Docker server.
+
 Set the settings as environment variables:
 * REMOTE_URL (str): ICS file URL.
 * LOCAL_URL (str): CalDAV URL.
