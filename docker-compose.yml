@@ -1,6 +1,6 @@
 version: "3.7"
 services:
-  synchronise:
+  ics_caldav_sync:
     build:
       context: "."
     env_file: ".env"
