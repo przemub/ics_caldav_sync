@@ -122,12 +122,15 @@ if __name__ == "__main__":
         "remote_password": os.getenv("REMOTE_PASWORD", ""),
     }
 
-    sync_every = "in " + os.getenv("SYNC_EVERY", None)
+    sync_every = os.getenv("SYNC_EVERY", None)
     if sync_every is not None:
+        sync_every = "in " + sync_every
         try:
             arrow.utcnow().dehumanize(sync_every)
         except ValueError as ve:
-            raise ValueError("SYNC_EVERY value is invalid. Try something like '2 minutes' or '1 hour'") from ve
+            raise ValueError(
+                "SYNC_EVERY value is invalid. Try something like '2 minutes' or '1 hour'"
+            ) from ve
 
     while True:
         if sync_every is None:
@@ -143,4 +146,3 @@ if __name__ == "__main__":
             seconds_to_next = (next_run - arrow.utcnow()).total_seconds()
             if seconds_to_next > 0:
                 time.sleep(seconds_to_next)
-                
