@@ -36,12 +36,12 @@ class ICSToCalDAV:
         remote_username: str = "",
         remote_password: str = "",
     ):
-        local_client = caldav.DAVClient(
+        self.local_client = caldav.DAVClient(
             url=local_url,
             auth=(local_username.encode(), local_password.encode()),
         )
 
-        self.local_calendar = local_client.principal().calendar(
+        self.local_calendar = self.local_client.principal().calendar(
             local_calendar_name
         )
         self.remote_calendar = Calendar(
@@ -58,11 +58,7 @@ class ICSToCalDAV:
         2) Loads them to ics library so their UID can be pulled,
         3) Pulls all of the UIDs and returns them.
         """
-        local_events = (
-            self.local_client.principal()
-            .calendar(name=local_calendar_name)
-            .date_search(arrow.utcnow())
-        )
+        local_events = self.local_calendar.date_search(arrow.utcnow())
         local_events_ids = set(
             next(iter(Calendar(e.data).events)).uid for e in local_events
         )
@@ -89,12 +85,22 @@ END:VCALENDAR
         2) Saves them into the local calendar,
         3) Removes local events which are not in the remote any more.
         """
-        for event in self.remote_calendar.events:
-            if arrow.utcnow() > event.end:
+        for remote_event in self.remote_calendar.events:
+            if arrow.utcnow() > remote_event.end:
                 continue
 
-            self.local_calendar.save_event(self._wrap(event))
-            print(".", end="")
+            self.local_calendar.save_event(self._wrap(remote_event))
+            print("+", end="")
+            sys.stdout.flush()
+        print()
+
+        remote_events_ids = set(e.uid for e in self.remote_calendar.events)
+        events_to_delete = self._get_local_events_ids() - remote_events_ids
+        for local_event_id in events_to_delete:
+            self.local_client.delete(
+                f"{self.local_calendar.url}{local_event_id}.ics"
+            )
+            print("-", end="")
             sys.stdout.flush()
         print()
 
