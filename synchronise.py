@@ -1,10 +1,10 @@
+import os
 import sys
-
-from ics import Calendar, Event
+import time
 
 import arrow
 import caldav
-import os
+import ics
 import requests
 
 
@@ -44,7 +44,7 @@ class ICSToCalDAV:
         self.local_calendar = self.local_client.principal().calendar(
             local_calendar_name
         )
-        self.remote_calendar = Calendar(
+        self.remote_calendar = ics.Calendar(
             requests.get(
                 remote_url,
                 auth=(remote_username.encode(), remote_password.encode()),
@@ -60,7 +60,7 @@ class ICSToCalDAV:
         """
         local_events = self.local_calendar.date_search(arrow.utcnow())
         local_events_ids = set(
-            next(iter(Calendar(e.data).events)).uid for e in local_events
+            next(iter(ics.Calendar(e.data).events)).uid for e in local_events
         )
         return local_events_ids
 
@@ -122,4 +122,25 @@ if __name__ == "__main__":
         "remote_password": os.getenv("REMOTE_PASWORD", ""),
     }
 
-    ICSToCalDAV(**settings).synchronise()
+    sync_every = "in " + os.getenv("SYNC_EVERY", None)
+    if sync_every is not None:
+        try:
+            arrow.utcnow().dehumanize(sync_every)
+        except ValueError as ve:
+            raise ValueError("SYNC_EVERY value is invalid. Try something like '2 minutes' or '1 hour'") from ve
+
+    while True:
+        if sync_every is None:
+            next_run = None
+        else:
+            next_run = arrow.utcnow().dehumanize(sync_every)
+
+        ICSToCalDAV(**settings).synchronise()
+
+        if next_run is None:
+            break
+        else:
+            seconds_to_next = (next_run - arrow.utcnow()).total_seconds()
+            if seconds_to_next > 0:
+                time.sleep(seconds_to_next)
+                
