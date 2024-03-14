@@ -22,6 +22,8 @@ Set the settings as environment variables:
 * REMOTE_USERNAME (str, optional): ICS host username.
 * REMOTE_PASSWORD (str, optional): ICS host password.
 * SYNC_EVERY (str): How often should the synchronisation occur? For example: 2 minutes, 1 hour. Synchronise once if empty.
+* DEBUG (bool, optional): Set to anything to print debugging messages. Please set this when reporting an error.
+* SYNC_ALL (bool, optional): If set, all events in the calendar will be synced. Otherwise, only the ones occuring in the future will be.
 
 ## Library usage
 
@@ -38,19 +40,23 @@ class and its `synchronise` method.
         local_password: str,
         remote_username: str = "",
         remote_password: str = "",
+        sync_all: bool = False
     )
 
     def ICSToCalDavSync.synchronise(self):
         """
         The main function which:
-        1) Pulls all the events from the remote calendar,
+        1) Pulls the events from the remote calendar,
         2) Saves them into the local calendar,
         3) Removes local events which are not in the remote any more.
+
+        If sync_all is set, all events will be pulled. Otherwise, only
+        the ones occuring after now will be.
         """
 ```
 
 ## Rationale
 
 In my case, my new shiny Bluetooth wristwatch, Casio Edifice ECB-10,
-did not support synchronisation with [https://support.apple.com/en-us/HT202361](calendar subscriptions).
+did not support synchronisation with [calendar subscriptions](https://support.apple.com/en-us/HT202361).
 And so this script was created.
