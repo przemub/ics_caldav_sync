@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import sys
 import time
@@ -5,8 +6,11 @@ import time
 import arrow
 import caldav
 import caldav.lib.error
+import datetime
+import dateutil.tz
 import ics
 import requests
+import requests.auth
 import vobject.base
 
 import logging
@@ -29,6 +33,8 @@ class ICSToCalDAV:
     * local_password (str): CalDAV password.
     * remote_username (str, optional): ICS host username.
     * remote_password (str, optional): ICS host password.
+    * sync_all (bool, optional): Sync past events.
+    * timezone (str, optional): Override events timezone. See: https://dateutil.readthedocs.io/en/stable/tz.html
     """
 
     def __init__(
@@ -41,11 +47,15 @@ class ICSToCalDAV:
         local_password: str,
         remote_username: str = "",
         remote_password: str = "",
-        sync_all: bool = False
+        sync_all: bool = False,
+        timezone: str | None = None,
     ):
         self.local_client = caldav.DAVClient(
             url=local_url,
-            auth=(local_username.encode(), local_password.encode()),
+            auth=requests.auth.HTTPBasicAuth(
+                local_username.encode(),
+                local_password.encode()
+            ),
         )
 
         self.local_calendar = self.local_client.principal().calendar(
@@ -59,13 +69,15 @@ class ICSToCalDAV:
         )
 
         self.sync_all = sync_all
+        self.timezone = dateutil.tz.gettz(timezone) \
+            if timezone is not None else None
 
-    def _get_local_events_ids(self) -> set[int]:
+    def _get_local_events_ids(self) -> set[str]:
         """
         This piece of crap:
-        1) Gets from the local calendar all the events ocurring after now,
+        1) Gets from the local calendar all the events occurring after now,
         2) Loads them to ics library so their UID can be pulled,
-        3) Pulls all of the UIDs and returns them.
+        3) Pulls all the UIDs and returns them.
 
         If sync_all is set, then all events will be pulled.
         """
@@ -83,18 +95,22 @@ class ICSToCalDAV:
         return local_events_ids
 
     @staticmethod
-    def _wrap(vevent: str) -> str:
+    def _wrap(vevent: ics.Event) -> str:
         """
         Since CalDAV expects a VEVENT in a VCALENDAR,
         we need to wrap each event pulled from a single ICS
         into its own calendar.
+        This is then serialized, so it's ready to be sent
+        via CalDAV.
         """
-        return f"""BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Chihiro Software Ltd//Calendar sync//EN
-{vevent}
-END:VCALENDAR
-"""
+        data = ics.Calendar(
+            events=[vevent],
+            creator="Chihiro Software Ltd//Calendar sync//EN"
+        ).serialize()
+
+        logger.debug("Serialized event:\n%s", data)
+
+        return data
 
     def synchronise(self):
         """
@@ -104,11 +120,22 @@ END:VCALENDAR
         3) Removes local events which are not in the remote any more.
 
         If sync_all is set, all events will be pulled. Otherwise, only
-        the ones occuring after now will be.
+        the ones occurring after now will be.
         """
+        now_naive = datetime.datetime.now()
+        now_aware = datetime.datetime.now(datetime.UTC)
+
         for remote_event in self.remote_calendar.events:
-            if not self.sync_all and arrow.utcnow() > remote_event.end:
-                continue
+            # Set timezone, if requested. Cannot set timezone on all-day events.
+            # Skip events in the past, unless requested not to.
+            if self.timezone and not remote_event.timespan.is_all_day():
+                remote_event.replace_timezone(self.timezone)
+
+                if not self.sync_all and now_aware > remote_event.end:
+                    continue
+            else:
+                if not self.sync_all and now_naive > remote_event.end:
+                    continue
 
             try:
                 self.local_calendar.save_event(self._wrap(remote_event))
@@ -148,6 +175,7 @@ if __name__ == "__main__":
         "remote_username": os.getenv("REMOTE_USERNAME", ""),
         "remote_password": os.getenv("REMOTE_PASWORD", ""),
         "sync_all": bool(os.getenv("SYNC_ALL", None)),
+        "timezone": os.getenv("TIMEZONE", None),
     }
 
     sync_every = os.getenv("SYNC_EVERY", None)
