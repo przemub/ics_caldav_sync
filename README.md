@@ -21,6 +21,7 @@ Set the settings as environment variables:
 * LOCAL_PASSWORD (str): CalDAV password.
 * REMOTE_USERNAME (str, optional): ICS host username.
 * REMOTE_PASSWORD (str, optional): ICS host password.
+* TIMEZONE (str, optional): Override events timezone. (Example timezones: Utc, Europe/Warsaw, Asia/Tokyo).
 * SYNC_EVERY (str): How often should the synchronisation occur? For example: 2 minutes, 1 hour. Synchronise once if empty.
 * DEBUG (bool, optional): Set to anything to print debugging messages. Please set this when reporting an error.
 * SYNC_ALL (bool, optional): If set, all events in the calendar will be synced. Otherwise, only the ones occuring in the future will be.
@@ -40,7 +41,8 @@ class and its `synchronise` method.
         local_password: str,
         remote_username: str = "",
         remote_password: str = "",
-        sync_all: bool = False
+        sync_all: bool = False,
+        timezone: str = "",
     )
 
     def ICSToCalDavSync.synchronise(self):
