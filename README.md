@@ -25,6 +25,7 @@ Set the settings as environment variables:
 * SYNC_EVERY (str): How often should the synchronisation occur? For example: 2 minutes, 1 hour. Synchronise once if empty.
 * DEBUG (bool, optional): Set to anything to print debugging messages. Please set this when reporting an error.
 * SYNC_ALL (bool, optional): If set, all events in the calendar will be synced. Otherwise, only the ones occuring in the future will be.
+* KEEP_LOCAL (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
 
 ## Library usage
 
@@ -42,6 +43,7 @@ class and its `synchronise` method.
         remote_username: str = "",
         remote_password: str = "",
         sync_all: bool = False,
+        keep_local: bool = False,
         timezone: str = "",
     )
 

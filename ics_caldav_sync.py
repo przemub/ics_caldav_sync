@@ -34,6 +34,7 @@ class ICSToCalDAV:
     * remote_username (str, optional): ICS host username.
     * remote_password (str, optional): ICS host password.
     * sync_all (bool, optional): Sync past events.
+    * keep_local (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
     * timezone (str, optional): Override events timezone. See: https://dateutil.readthedocs.io/en/stable/tz.html
     """
 
@@ -48,6 +49,7 @@ class ICSToCalDAV:
         remote_username: str = "",
         remote_password: str = "",
         sync_all: bool = False,
+        keep_local: bool = False,
         timezone: str | None = None,
     ):
         self.local_client = caldav.DAVClient(
@@ -69,6 +71,7 @@ class ICSToCalDAV:
         )
 
         self.sync_all = sync_all
+        self.keep_local = keep_local
         self.timezone = dateutil.tz.gettz(timezone) \
             if timezone is not None else None
 
@@ -145,14 +148,16 @@ class ICSToCalDAV:
             sys.stdout.flush()
         print()
 
-        remote_events_ids = set(e.uid for e in self.remote_calendar.events)
-        events_to_delete = self._get_local_events_ids() - remote_events_ids
-        for local_event_id in events_to_delete:
-            self.local_client.delete(
-                f"{self.local_calendar.url}{local_event_id}.ics"
-            )
-            print("-", end="")
-            sys.stdout.flush()
+        if not self.keep_local:
+            # Delete local events that don't exist in the remote
+            remote_events_ids = set(e.uid for e in self.remote_calendar.events)
+            events_to_delete = self._get_local_events_ids() - remote_events_ids
+            for local_event_id in events_to_delete:
+                self.local_client.delete(
+                    f"{self.local_calendar.url}{local_event_id}.ics"
+                )
+                print("-", end="")
+                sys.stdout.flush()
         print()
 
 
@@ -174,7 +179,8 @@ if __name__ == "__main__":
         "local_password": getenv_or_raise("LOCAL_PASSWORD"),
         "remote_username": os.getenv("REMOTE_USERNAME", ""),
         "remote_password": os.getenv("REMOTE_PASWORD", ""),
-        "sync_all": bool(os.getenv("SYNC_ALL", None)),
+        "sync_all": bool(os.getenv("SYNC_ALL", False)),
+        "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
         "timezone": os.getenv("TIMEZONE", None),
     }
 
