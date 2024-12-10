@@ -178,7 +178,7 @@ if __name__ == "__main__":
         "local_username": getenv_or_raise("LOCAL_USERNAME"),
         "local_password": getenv_or_raise("LOCAL_PASSWORD"),
         "remote_username": os.getenv("REMOTE_USERNAME", ""),
-        "remote_password": os.getenv("REMOTE_PASWORD", ""),
+        "remote_password": os.getenv("REMOTE_PASSWORD", ""),
         "sync_all": bool(os.getenv("SYNC_ALL", False)),
         "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
         "timezone": os.getenv("TIMEZONE", None),
