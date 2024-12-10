@@ -7,10 +7,10 @@ Look no further.
 
 ## Standalone usage
 
-Install requirements from `requirements.txt` and run `ics_caldav_sync.py` file
-using Python 3.8 or higher.
+Install the script with `pip install .` and run `ics_caldav_sync` script
+which should be on your PATH now.
 
-There exist also `Dockerfile` and `docker-compose.yml` files so you can
+There also exist `Dockerfile` and `docker-compose.yml` files so you can
 run it on your Docker server.
 
 Set the settings as environment variables:

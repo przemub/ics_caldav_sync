@@ -172,7 +172,7 @@ def getenv_or_raise(var):
     return value
 
 
-if __name__ == "__main__":
+def main():
     if os.getenv("DEBUG"):
         logging.basicConfig(level=logging.DEBUG)
 
@@ -213,3 +213,7 @@ if __name__ == "__main__":
             seconds_to_next = (next_run - arrow.utcnow()).total_seconds()
             if seconds_to_next > 0:
                 time.sleep(seconds_to_next)
+
+
+if __name__ == "__main__":
+    main()
