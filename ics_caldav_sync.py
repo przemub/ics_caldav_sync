@@ -126,7 +126,7 @@ class ICSToCalDAV:
         the ones occurring after now will be.
         """
         now_naive = datetime.datetime.now()
-        now_aware = datetime.datetime.now(datetime.UTC)
+        now_aware = datetime.datetime.now(datetime.timezone.utc)
 
         for remote_event in self.remote_calendar.events:
             # Set timezone, if requested. Cannot set timezone on all-day events.
