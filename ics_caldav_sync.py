@@ -130,15 +130,20 @@ class ICSToCalDAV:
 
         for remote_event in self.remote_calendar.events:
             # Set timezone, if requested. Cannot set timezone on all-day events.
-            # Skip events in the past, unless requested not to.
             if self.timezone and not remote_event.timespan.is_all_day():
                 remote_event.replace_timezone(self.timezone)
 
-                if not self.sync_all and now_aware > remote_event.end:
-                    continue
-            else:
-                if not self.sync_all and now_naive > remote_event.end:
-                    continue
+            # Skip events in the past, unless requested not to.
+            if not self.sync_all:
+                end = remote_event.end
+                # Compare against naive- or aware- datetime
+                # https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
+                if end.tzinfo is not None and end.tzinfo.utcoffset(end) is not None:
+                    if now_aware > remote_event.end:
+                        continue
+                else:
+                    if now_naive > remote_event.end:
+                        continue
 
             try:
                 self.local_calendar.save_event(self._wrap(remote_event))
