@@ -181,7 +181,7 @@ if __name__ == "__main__":
         "remote_password": os.getenv("REMOTE_PASSWORD", ""),
         "sync_all": bool(os.getenv("SYNC_ALL", False)),
         "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
-        "timezone": os.getenv("TIMEZONE", None),
+        "timezone": os.getenv("TIMEZONE") or None,
     }
 
     sync_every = os.getenv("SYNC_EVERY", None)
