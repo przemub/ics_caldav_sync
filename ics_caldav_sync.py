@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+import datetime
+import logging
 import os
 import sys
 import time
@@ -6,14 +8,13 @@ import time
 import arrow
 import caldav
 import caldav.lib.error
-import datetime
 import dateutil.tz
 import icalendar
 import requests
 import requests.auth
 import vobject.base
+import x_wr_timezone
 
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,12 @@ class ICSToCalDAV:
         keep_local: bool = False,
         timezone: str | None = None,
     ):
+        self.timezone = dateutil.tz.gettz(timezone) \
+            if timezone is not None else None
+        if timezone and self.timezone is None:
+            logger.critical("Timezone %s does not exist.", timezone)
+            sys.exit(1)
+
         self.local_client = caldav.DAVClient(
             url=local_url,
             auth=requests.auth.HTTPBasicAuth(
@@ -63,7 +70,8 @@ class ICSToCalDAV:
         self.local_calendar = self.local_client.principal().calendar(
             local_calendar_name
         )
-        self.remote_calendar = icalendar.Calendar.from_ical(
+
+        remote_calendar = icalendar.Calendar.from_ical(
             requests.get(
                 remote_url,
                 auth=requests.auth.HTTPBasicAuth(
@@ -72,14 +80,14 @@ class ICSToCalDAV:
                 ),
             ).text
         )
+        # Fix timezones
+        self.remote_calendar = x_wr_timezone.to_standard(
+            remote_calendar,
+            self.timezone
+        )
 
         self.sync_all = sync_all
         self.keep_local = keep_local
-        self.timezone = dateutil.tz.gettz(timezone) \
-            if timezone is not None else None
-        if timezone and self.timezone is None:
-            logger.critical("Timezone %s does not exist.", timezone)
-            sys.exit(1)
 
     def _get_local_events_ids(self) -> set[str]:
         """
@@ -138,13 +146,6 @@ class ICSToCalDAV:
         today = datetime.date.today()
 
         for remote_event in self.remote_calendar.events:
-            # Set timezone, if requested. Cannot set timezone on all-day events.
-            if self.timezone:
-                if isinstance(remote_event.start, datetime.datetime):
-                    remote_event.start = remote_event.start.replace(tzinfo=self.timezone)
-                if isinstance(remote_event.end, datetime.datetime):
-                    remote_event.end = remote_event.end.replace(tzinfo=self.timezone)
-
             # Skip events in the past, unless requested not to.
             if not self.sync_all:
                 end = remote_event.end
