@@ -8,7 +8,7 @@ import caldav
 import caldav.lib.error
 import datetime
 import dateutil.tz
-import ics
+import icalendar
 import requests
 import requests.auth
 import vobject.base
@@ -63,10 +63,13 @@ class ICSToCalDAV:
         self.local_calendar = self.local_client.principal().calendar(
             local_calendar_name
         )
-        self.remote_calendar = ics.Calendar(
+        self.remote_calendar = icalendar.Calendar.from_ical(
             requests.get(
                 remote_url,
-                auth=(remote_username.encode(), remote_password.encode()),
+                auth=requests.auth.HTTPBasicAuth(
+                    remote_username.encode(),
+                    remote_password.encode()
+                ),
             ).text
         )
 
@@ -74,6 +77,9 @@ class ICSToCalDAV:
         self.keep_local = keep_local
         self.timezone = dateutil.tz.gettz(timezone) \
             if timezone is not None else None
+        if timezone and self.timezone is None:
+            logger.critical("Timezone %s does not exist.", timezone)
+            sys.exit(1)
 
     def _get_local_events_ids(self) -> set[str]:
         """
@@ -93,12 +99,12 @@ class ICSToCalDAV:
                 logger.critical("Server failed when filtering events. Try SYNC_ALL=1 to do a full sync.")
                 raise
         local_events_ids = set(
-            next(iter(ics.Calendar(e.data).events)).uid for e in local_events
+            e.icalendar_component.get("uid") for e in local_events
         )
         return local_events_ids
 
     @staticmethod
-    def _wrap(vevent: ics.Event) -> str:
+    def _wrap(vevent: icalendar.Event) -> str:
         """
         Since CalDAV expects a VEVENT in a VCALENDAR,
         we need to wrap each event pulled from a single ICS
@@ -106,11 +112,13 @@ class ICSToCalDAV:
         This is then serialized, so it's ready to be sent
         via CalDAV.
         """
-        data = ics.Calendar(
-            events=[vevent],
-            creator="Chihiro Software Ltd//Calendar sync//EN"
-        ).serialize()
+        calendar = icalendar.Calendar(
+            prodid="-//Chihiro Software Ltd//NONSGML Calendar sync//EN"
+        )
+        calendar.add_component(vevent)
+        calendar.add_missing_timezones()
 
+        data = calendar.to_ical()
         logger.debug("Serialized event:\n%s", data)
 
         return data
@@ -127,22 +135,29 @@ class ICSToCalDAV:
         """
         now_naive = datetime.datetime.now()
         now_aware = datetime.datetime.now(datetime.timezone.utc)
+        today = datetime.date.today()
 
         for remote_event in self.remote_calendar.events:
             # Set timezone, if requested. Cannot set timezone on all-day events.
-            if self.timezone and not remote_event.timespan.is_all_day():
-                remote_event.replace_timezone(self.timezone)
+            if self.timezone:
+                if isinstance(remote_event.start, datetime.datetime):
+                    remote_event.start = remote_event.start.replace(tzinfo=self.timezone)
+                if isinstance(remote_event.end, datetime.datetime):
+                    remote_event.end = remote_event.end.replace(tzinfo=self.timezone)
 
             # Skip events in the past, unless requested not to.
             if not self.sync_all:
                 end = remote_event.end
-                # Compare against naive- or aware- datetime
+                # Compare against date, or naive- or aware- datetime
                 # https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
-                if end.tzinfo is not None and end.tzinfo.utcoffset(end) is not None:
-                    if now_aware > remote_event.end:
+                if isinstance(end, datetime.date) and not isinstance(end, datetime.datetime):
+                    if today > end:
+                        continue
+                elif end.tzinfo is not None and end.tzinfo.utcoffset(end) is not None:
+                    if now_aware > end:
                         continue
                 else:
-                    if now_naive > remote_event.end:
+                    if now_naive > end:
                         continue
 
             try:
@@ -155,7 +170,7 @@ class ICSToCalDAV:
 
         if not self.keep_local:
             # Delete local events that don't exist in the remote
-            remote_events_ids = set(e.uid for e in self.remote_calendar.events)
+            remote_events_ids = set(e["UID"] for e in self.remote_calendar.events)
             events_to_delete = self._get_local_events_ids() - remote_events_ids
             for local_event_id in events_to_delete:
                 self.local_client.delete(
