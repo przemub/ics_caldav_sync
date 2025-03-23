@@ -19,8 +19,10 @@ Set the settings as environment variables:
 * LOCAL_CALENDAR_NAME (str): The name of your CalDAV calendar.
 * LOCAL_USERNAME (str): CalDAV username.
 * LOCAL_PASSWORD (str): CalDAV password.
+* LOCAL_AUTH (str, optional): CalDAV authentication method (either basic or digest). Default: basic.
 * REMOTE_USERNAME (str, optional): ICS host username.
 * REMOTE_PASSWORD (str, optional): ICS host password.
+* REMOTE_AUTH (str, optional): ICS host authentication method (either basic or digest). Default: basic.
 * TIMEZONE (str, optional): Override events timezone. (Example timezones: Utc, Europe/Warsaw, Asia/Tokyo).
 * SYNC_EVERY (str): How often should the synchronisation occur? For example: 2 minutes, 1 hour. Synchronise once if empty.
 * DEBUG (bool, optional): Set to anything to print debugging messages. Please set this when reporting an error.
@@ -57,6 +59,24 @@ class and its `synchronise` method.
         If sync_all is set, all events will be pulled. Otherwise, only
         the ones occuring after now will be.
         """
+```
+
+## Example configuration with Docker and Baikal
+
+``` yaml
+services:
+  sync-mycalendar:
+    build:
+      context: "."
+    restart: unless-stopped
+    environment:
+      - REMOTE_URL=https://example.com/path/to/calendar_file.ics
+      - LOCAL_URL=https://baikal.myserver.com/dav.php/
+      - LOCAL_CALENDAR_NAME=My Calendar
+      - LOCAL_USERNAME=myusername
+      - LOCAL_PASSWORD=mypassword
+      - LOCAL_AUTH=digest
+      - SYNC_EVERY=30 minutes
 ```
 
 ## Rationale

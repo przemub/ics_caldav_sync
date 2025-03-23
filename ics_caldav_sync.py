@@ -47,8 +47,10 @@ class ICSToCalDAV:
         local_calendar_name: str,
         local_username: str,
         local_password: str,
+        local_auth: str = "basic",
         remote_username: str = "",
         remote_password: str = "",
+        remote_auth: str = "basic",
         sync_all: bool = False,
         keep_local: bool = False,
         timezone: str | None = None,
@@ -59,11 +61,18 @@ class ICSToCalDAV:
             logger.critical("Timezone %s does not exist.", timezone)
             sys.exit(1)
 
+
+        if local_auth == "digest":
+            local_auth = requests.auth.HTTPDigestAuth
+        else:
+            local_auth = requests.auth.HTTPBasicAuth
+            local_username = local_username.encode()
+            local_password = local_password.encode()
         self.local_client = caldav.DAVClient(
             url=local_url,
-            auth=requests.auth.HTTPBasicAuth(
-                local_username.encode(),
-                local_password.encode()
+            auth=local_auth(
+                local_username,
+                local_password
             ),
         )
 
@@ -71,12 +80,19 @@ class ICSToCalDAV:
             local_calendar_name
         )
 
+        if local_auth == "digest":
+            remote_auth = requests.auth.HTTPDigestAuth
+        else:
+            remote_auth = requests.auth.HTTPBasicAuth
+            remote_username = remote_username.encode()
+            remote_password = remote_password.encode()
+
         remote_calendar = icalendar.Calendar.from_ical(
             requests.get(
                 remote_url,
-                auth=requests.auth.HTTPBasicAuth(
-                    remote_username.encode(),
-                    remote_password.encode()
+                auth=remote_auth(
+                    remote_username,
+                    remote_password
                 ),
             ).text
         )
@@ -198,8 +214,10 @@ def main():
         "local_calendar_name": getenv_or_raise("LOCAL_CALENDAR_NAME"),
         "local_username": getenv_or_raise("LOCAL_USERNAME"),
         "local_password": getenv_or_raise("LOCAL_PASSWORD"),
+        "local_auth": os.getenv("LOCAL_AUTH", "basic"),
         "remote_username": os.getenv("REMOTE_USERNAME", ""),
         "remote_password": os.getenv("REMOTE_PASSWORD", ""),
+        "remote_auth": os.getenv("REMOTE_AUTH", "basic"),
         "sync_all": bool(os.getenv("SYNC_ALL", False)),
         "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
         "timezone": os.getenv("TIMEZONE") or None,
