@@ -42,11 +42,13 @@ class and its `synchronise` method.
         local_calendar_name: str,
         local_username: str,
         local_password: str,
+        local_auth: str = "basic",
         remote_username: str = "",
         remote_password: str = "",
+        remote_auth: str = "basic",
         sync_all: bool = False,
         keep_local: bool = False,
-        timezone: str = "",
+        timezone: str | None = None,
     )
 
     def ICSToCalDavSync.synchronise(self):

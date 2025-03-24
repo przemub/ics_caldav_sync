@@ -61,41 +61,22 @@ class ICSToCalDAV:
             logger.critical("Timezone %s does not exist.", timezone)
             sys.exit(1)
 
-
-        if local_auth == "digest":
-            local_auth = requests.auth.HTTPDigestAuth
-        else:
-            local_auth = requests.auth.HTTPBasicAuth
-            local_username = local_username.encode()
-            local_password = local_password.encode()
         self.local_client = caldav.DAVClient(
             url=local_url,
-            auth=local_auth(
-                local_username,
-                local_password
-            ),
+            auth=self._get_auth(local_username, local_password, local_auth)
         )
 
         self.local_calendar = self.local_client.principal().calendar(
             local_calendar_name
         )
 
-        if local_auth == "digest":
-            remote_auth = requests.auth.HTTPDigestAuth
-        else:
-            remote_auth = requests.auth.HTTPBasicAuth
-            remote_username = remote_username.encode()
-            remote_password = remote_password.encode()
-
         remote_calendar = icalendar.Calendar.from_ical(
             requests.get(
                 remote_url,
-                auth=remote_auth(
-                    remote_username,
-                    remote_password
-                ),
+                auth=self._get_auth(remote_username, remote_password, remote_auth)
             ).text
         )
+
         # Fix timezones
         self.remote_calendar = x_wr_timezone.to_standard(
             remote_calendar,
@@ -104,6 +85,25 @@ class ICSToCalDAV:
 
         self.sync_all = sync_all
         self.keep_local = keep_local
+
+    @staticmethod
+    def _get_auth(username: str, password: str, method: str) -> requests.auth.AuthBase:
+        """
+        Get a requests auth instance from given username, password and
+        authentication method.
+        Supported methods: "basic", "digest".
+        """
+        if method == "basic":
+            return requests.auth.HTTPBasicAuth(
+                username.encode(),
+                password.encode(),
+            )
+        if method == "digest":
+            return requests.auth.HTTPDigestAuth(
+                username,
+                password
+            )
+        raise ValueError("Invalid authentication method %s", method)
 
     def _get_local_events_ids(self) -> set[str]:
         """
@@ -128,7 +128,7 @@ class ICSToCalDAV:
         return local_events_ids
 
     @staticmethod
-    def _wrap(vevent: icalendar.Event) -> str:
+    def _wrap(vevent: icalendar.Event) -> bytes:
         """
         Since CalDAV expects a VEVENT in a VCALENDAR,
         we need to wrap each event pulled from a single ICS
