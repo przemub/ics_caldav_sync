@@ -63,13 +63,14 @@ class and its `synchronise` method.
         """
 ```
 
-## Example configuration with docker-compose
+## Examples
 
-``` yaml
+### Docker-compose and Baikal
+
+```yaml
 services:
-  sync-mycalendar:
-    build:
-      context: "."
+  ics_caldav_sync:
+    image: ics_caldav_sync
     restart: unless-stopped
     environment:
       - REMOTE_URL=https://example.com/path/to/calendar_file.ics
@@ -79,6 +80,19 @@ services:
       - LOCAL_PASSWORD=mypassword
       - LOCAL_AUTH=digest  # Required by Baikal - try removing if getting Unauthorized error
       - SYNC_EVERY=30 minutes
+```
+
+# Command-line usage
+
+`ics_caldav_sync` can be also used from the command line. An example:
+
+```shell
+REMOTE_URL=https://example.com/path/to/calendar_file.ics \
+  LOCAL_URL=https://baikal.myserver.com/dav.php \
+  LOCAL_CALENDAR_NAME="My Calendar" \
+  LOCAL_USERNAME=myusername \
+  LOCAL_PASSWORD=mypassword \
+  ics_caldav_sync
 ```
 
 ## Rationale
