@@ -14,7 +14,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Full fetch for setuptools-scm
+        fetch-depth: 0
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
@@ -23,11 +23,18 @@ jobs:
     - name: Set commit short ID
       id: short_id
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+    - name: Get current version tag
+      id: version_tag
+      run: |
+        # Get the current Git tag, if it exists
+        tag=$(git describe --tags --exact-match 2>/dev/null || echo "")
+        echo "tag=$tag" >> $GITHUB_OUTPUT
     - name: Build and push
       uses: docker/build-push-action@v6
       with:
         platforms: linux/amd64,linux/arm64
         push: true
-        context: .  # Include .git in context
-        tags: przemub/ics_caldav_sync:latest,przemub/ics_caldav_sync:${{ steps.short_id.outputs.sha_short }}
-
+        tags: |
+          przemub/ics_caldav_sync:latest
+          przemub/ics_caldav_sync:${{ steps.short_id.outputs.sha_short }}
+          ${{ steps.version_tag.outputs.tag && 'przemub/ics_caldav_sync:' + steps.version_tag.outputs.tag }}
