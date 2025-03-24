@@ -27,8 +27,12 @@ jobs:
       id: version_tag
       run: |
         # Get the current Git tag, if it exists
-        tag=$(git describe --tags --exact-match 2>/dev/null || echo "")
-        echo "tag=$tag" >> $GITHUB_OUTPUT
+        tag=$(git describe --tags --exact-match 2>/dev/null || true)
+        if [[ -n "$tag" ]]; then
+          echo "tag=przemub/ics_caldav_sync:$tag" >> $GITHUB_OUTPUT
+        else
+          echo "tag=" >> $GITHUB_OUTPUT
+        fi
     - name: Build and push
       uses: docker/build-push-action@v6
       with:
@@ -37,4 +41,4 @@ jobs:
         tags: |
           przemub/ics_caldav_sync:latest
           przemub/ics_caldav_sync:${{ steps.short_id.outputs.sha_short }}
-          ${{ steps.version_tag.outputs.tag && 'przemub/ics_caldav_sync:' + steps.version_tag.outputs.tag }}
+          ${{ steps.version_tag.outputs.tag }}
