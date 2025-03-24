@@ -82,7 +82,7 @@ services:
       - SYNC_EVERY=30 minutes
 ```
 
-# Command-line usage
+## Command-line usage
 
 `ics_caldav_sync` can be also used from the command line. An example:
 
