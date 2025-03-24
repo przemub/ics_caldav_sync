@@ -2,6 +2,7 @@
 import datetime
 import logging
 import os
+import pathlib
 import sys
 import time
 
@@ -200,7 +201,11 @@ class ICSToCalDAV:
 
 def getenv_or_raise(var):
     if (value := os.getenv(var)) is None:
-        raise Exception(f"Environment variable {var} is unset")
+        print(f"\033[1mEnvironment variable {var} is unset.\033[0m\n", file=sys.stderr)
+        # Printing help text
+        with open(pathlib.Path(__file__).parent / "README.md") as f:
+            print(f.read(), file=sys.stderr)
+        sys.exit(1)
     return value
 
 
