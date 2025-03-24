@@ -7,11 +7,15 @@ Look no further.
 
 ## Standalone usage
 
-Install the script with `pip install .` and run `ics_caldav_sync` script
-which should be on your PATH now.
+Install the script with `pip install ics_caldav_sync`
+(or, if installing from source, `pip install .`) 
+and run `ics_caldav_sync` script which should be on your PATH now.
 
 There also exist `Dockerfile` and `docker-compose.yml` files so you can
 run it on your Docker server.
+
+The Docker images are published to [Docker Hub](https://hub.docker.com/r/przemub/ics_caldav_sync),
+repository `przemub/ics_caldav_sync` tagged by short commit hashes and versions.
 
 Set the settings as environment variables:
 * REMOTE_URL (str): ICS file URL.
@@ -65,7 +69,38 @@ class and its `synchronise` method.
 
 ## Examples
 
-### Docker-compose and Baikal
+### Command-line usage
+
+`ics_caldav_sync` can be used from the command line when installed with `pip`. An example:
+
+```shell
+REMOTE_URL=https://example.com/path/to/calendar_file.ics \
+  LOCAL_URL=https://example.net/caldav \
+  LOCAL_CALENDAR_NAME="My Calendar" \
+  LOCAL_USERNAME=myusername \
+  LOCAL_PASSWORD=mypassword \
+  ics_caldav_sync
+```
+
+### Docker
+
+You can also do the same as a Docker one-liner - to avoid installing dependencies yourself.
+
+```shell
+docker run --rm \
+  -e REMOTE_URL=https://example.com/path/to/calendar_file.ics \
+  -e LOCAL_URL=https://example.net/caldav \
+  -e LOCAL_CALENDAR_NAME="My Calendar" \
+  -e LOCAL_USERNAME=myusername \
+  -e LOCAL_PASSWORD=mypassword \
+  przemub/ics_caldav_sync
+```
+
+### Docker Compose
+
+When setting up a long-running, periodic sync, Docker Compose can be helpful.
+
+This example also shows settings needed by a CalDAV server [Baïkal](https://sabre.io/baikal/).
 
 ```yaml
 services:
@@ -82,18 +117,17 @@ services:
       - SYNC_EVERY=30 minutes
 ```
 
-### Command-line usage
+## Tested with
 
-`ics_caldav_sync` can be also used from the command line. An example:
+On the local side (CalDAV server):
+- [Baïkal](https://sabre.io/baikal/)
+- [Radicale](https://radicale.org/v3.html)
 
-```shell
-REMOTE_URL=https://example.com/path/to/calendar_file.ics \
-  LOCAL_URL=https://baikal.myserver.com/dav.php \
-  LOCAL_CALENDAR_NAME="My Calendar" \
-  LOCAL_USERNAME=myusername \
-  LOCAL_PASSWORD=mypassword \
-  ics_caldav_sync
-```
+On the remote site (ICS file generator):
+- [Google Calendar](https://support.google.com/calendar/answer/37083)
+- [Microsoft Outlook](https://support.microsoft.com/en-gb/office/share-your-calendar-in-outlook-2fcf4f4f-8d46-4d8b-ae79-5d94549e531b)
+
+Please feel free to open a PR against this section to add your configuration!
 
 ## Rationale
 
