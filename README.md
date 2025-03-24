@@ -63,7 +63,7 @@ class and its `synchronise` method.
         """
 ```
 
-## Example configuration with Docker and Baikal
+## Example configuration with docker-compose
 
 ``` yaml
 services:
@@ -77,7 +77,7 @@ services:
       - LOCAL_CALENDAR_NAME=My Calendar
       - LOCAL_USERNAME=myusername
       - LOCAL_PASSWORD=mypassword
-      - LOCAL_AUTH=digest
+      - LOCAL_AUTH=digest  # Required by Baikal - try removing if getting Unauthorized error
       - SYNC_EVERY=30 minutes
 ```
 
