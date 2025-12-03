@@ -213,8 +213,9 @@ def main():
     if os.getenv("DEBUG"):
         logging.basicConfig(level=logging.DEBUG)
 
+    remote_urls = getenv_or_raise("REMOTE_URL").split(" ")
+
     settings = {
-        "remote_url": getenv_or_raise("REMOTE_URL"),
         "local_url": getenv_or_raise("LOCAL_URL"),
         "local_calendar_name": getenv_or_raise("LOCAL_CALENDAR_NAME"),
         "local_username": getenv_or_raise("LOCAL_USERNAME"),
@@ -244,7 +245,8 @@ def main():
         else:
             next_run = arrow.utcnow().dehumanize(sync_every)
 
-        ICSToCalDAV(**settings).synchronise()
+        for remote_url in remote_urls:
+            ICSToCalDAV(remote_url=remote_url, **settings).synchronise()
 
         if next_run is None:
             break

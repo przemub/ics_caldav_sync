@@ -18,7 +18,7 @@ The Docker images are published to [Docker Hub](https://hub.docker.com/r/przemub
 repository `przemub/ics_caldav_sync` tagged by short commit hashes and versions.
 
 Set the settings as environment variables:
-* REMOTE_URL (str): ICS file URL.
+* REMOTE_URL (str): ICS file URL. You can provide multiple URLs, seperated by a space character.
 * LOCAL_URL (str): CalDAV URL.
 * LOCAL_CALENDAR_NAME (str): The name of your CalDAV calendar.
 * LOCAL_USERNAME (str): CalDAV username.
