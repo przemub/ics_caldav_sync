@@ -5,6 +5,7 @@ import os
 import pathlib
 import sys
 import time
+from typing import Literal
 
 import arrow
 import caldav
@@ -18,12 +19,13 @@ import x_wr_timezone
 
 
 logger = logging.getLogger(__name__)
+AuthenticationMethod = Literal["basic", "digest"]
 
 
 class ICSToCalDAV:
     """
     Downloads a calendar in ICS format and uploads it to a CalDAV server.
-    Your employee, school, or whoever shares a calendar as an ICS file
+    Your employee, school, or whoever shares a calendar as an ICS file,
     and you'd like to have it on another CalDAV server?
     Look no further.
 
@@ -33,8 +35,10 @@ class ICSToCalDAV:
     * local_calendar_name (str): The name of your CalDAV calendar.
     * local_username (str): CalDAV username.
     * local_password (str): CalDAV password.
+    * local_auth (str, optional): CalDAV authentication method (either basic or digest).
     * remote_username (str, optional): ICS host username.
     * remote_password (str, optional): ICS host password.
+    * remote_auth (str, optional): ICS host authentication method (either basic or digest).
     * sync_all (bool, optional): Sync past events.
     * keep_local (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
     * timezone (str, optional): Override events timezone. See: https://dateutil.readthedocs.io/en/stable/tz.html
@@ -48,10 +52,10 @@ class ICSToCalDAV:
         local_calendar_name: str,
         local_username: str,
         local_password: str,
-        local_auth: str = "basic",
+        local_auth: AuthenticationMethod = "basic",
         remote_username: str = "",
         remote_password: str = "",
-        remote_auth: str = "basic",
+        remote_auth: AuthenticationMethod = "basic",
         sync_all: bool = False,
         keep_local: bool = False,
         timezone: str | None = None,
@@ -88,7 +92,7 @@ class ICSToCalDAV:
         self.keep_local = keep_local
 
     @staticmethod
-    def _get_auth(username: str, password: str, method: str) -> requests.auth.AuthBase:
+    def _get_auth(username: str, password: str, method: AuthenticationMethod) -> requests.auth.AuthBase:
         """
         Get a requests auth instance from given username, password and
         authentication method.

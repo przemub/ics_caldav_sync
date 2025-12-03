@@ -1,7 +1,11 @@
 # ICS to CalDAV synchronisation
 
+[![PyPI version](https://badge.fury.io/py/ics-caldav-sync.svg)](https://pypi.org/project/ics-caldav-sync/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/przemub/ics_caldav_sync)](https://hub.docker.com/r/przemub/ics_caldav_sync)
+[![Licence](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Downloads a calendar in ICS format and uploads it to a CalDAV server, regularly.
-Your employee, school, or whoever shares a calendar as a link to an ICS file
+Your employee, school, or whoever shares a calendar as a link to an ICS file,
 and you'd like to have it on another CalDAV server?
 Look no further.
 
@@ -10,6 +14,7 @@ Look no further.
 Install the script with `pip install ics_caldav_sync`
 (or, if installing from source, `pip install .`) 
 and run `ics_caldav_sync` script which should be on your PATH now.
+Python 3.9 or higher is required.
 
 There also exist `Dockerfile` and `docker-compose.yml` files so you can
 run it on your Docker server.
@@ -18,53 +23,46 @@ The Docker images are published to [Docker Hub](https://hub.docker.com/r/przemub
 repository `przemub/ics_caldav_sync` tagged by short commit hashes and versions.
 
 Set the settings as environment variables:
-* REMOTE_URL (str): ICS file URL. You can provide multiple URLs, seperated by a space character.
-* LOCAL_URL (str): CalDAV URL.
-* LOCAL_CALENDAR_NAME (str): The name of your CalDAV calendar.
-* LOCAL_USERNAME (str): CalDAV username.
-* LOCAL_PASSWORD (str): CalDAV password.
-* LOCAL_AUTH (str, optional): CalDAV authentication method (either basic or digest). Default: basic.
-* REMOTE_USERNAME (str, optional): ICS host username.
-* REMOTE_PASSWORD (str, optional): ICS host password.
-* REMOTE_AUTH (str, optional): ICS host authentication method (either basic or digest). Default: basic.
-* TIMEZONE (str, optional): Override events timezone. (Example timezones: Utc, Europe/Warsaw, Asia/Tokyo).
-* SYNC_EVERY (str): How often should the synchronisation occur? For example: 2 minutes, 1 hour. Synchronise once if empty.
-* DEBUG (bool, optional): Set to anything to print debugging messages. Please set this when reporting an error.
-* SYNC_ALL (bool, optional): If set, all events in the calendar will be synced. Otherwise, only the ones occuring in the future will be.
-* KEEP_LOCAL (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
+
+| Variable              | Type    | Required | Default | Description                                                                                                  |
+|-----------------------|---------|----------|---------|--------------------------------------------------------------------------------------------------------------|
+| `REMOTE_URL`          | string  | Yes      | -       | ICS file URL. You can provide multiple URLs, separated by a space character.                                 |
+| `LOCAL_URL`           | string  | Yes      | -       | CalDAV server URL.                                                                                           |
+| `LOCAL_CALENDAR_NAME` | string  | Yes      | -       | The name of your CalDAV calendar.                                                                            |
+| `LOCAL_USERNAME`      | string  | Yes      | -       | CalDAV username.                                                                                             |
+| `LOCAL_PASSWORD`      | string  | Yes      | -       | CalDAV password.                                                                                             |
+| `LOCAL_AUTH`          | string  | No       | `basic` | CalDAV authentication method (either `basic` or `digest`).                                                   |
+| `REMOTE_USERNAME`     | string  | No       | -       | ICS host username.                                                                                           |
+| `REMOTE_PASSWORD`     | string  | No       | -       | ICS host password.                                                                                           |
+| `REMOTE_AUTH`         | string  | No       | `basic` | ICS host authentication method (either `basic` or `digest`).                                                 |
+| `TIMEZONE`            | string  | No       | -       | Override events timezone. Examples: `Utc`, `Europe/Warsaw`, `Asia/Tokyo`.                                    |
+| `SYNC_EVERY`          | string  | No       | -       | How often should the synchronisation occur? Examples: `2 minutes`, `1 hour`. Synchronise once if empty.      |
+| `DEBUG`               | boolean | No       | `false` | Set to any non-empty value to print debugging messages. Please set this when reporting an error.             |
+| `SYNC_ALL`            | boolean | No       | `false` | If set, all events in the calendar will be synced. Otherwise, only the ones occurring in the future will be. |
+| `KEEP_LOCAL`          | boolean | No       | `false` | Do not delete events on the CalDAV server that do not exist in the ICS file.                                 |
 
 ## Library usage
 
 This script can be also used as a library in your Python script using `ICSToCalDAVSync`
 class and its `synchronise` method.
 ```
-    def ICSToCalDAVSync.__init__(
-        self,
-        *,
-        remote_url: str,
-        local_url: str,
-        local_calendar_name: str,
-        local_username: str,
-        local_password: str,
-        local_auth: str = "basic",
-        remote_username: str = "",
-        remote_password: str = "",
-        remote_auth: str = "basic",
-        sync_all: bool = False,
-        keep_local: bool = False,
-        timezone: str | None = None,
-    )
+from ics_caldav_sync import ICSToCalDAVSync
 
-    def ICSToCalDavSync.synchronise(self):
-        """
-        The main function which:
-        1) Pulls the events from the remote calendar,
-        2) Saves them into the local calendar,
-        3) Removes local events which are not in the remote any more.
+sync = ICSToCalDAVSync(
+    remote_url="https://example.com/calendar.ics",
+    local_url="https://caldav.example.com",
+    local_calendar_name="My Calendar",
+    local_username="username",
+    local_password="password",
+    # remote_username="",
+    # remote_password="",
+    # remote_auth="basic|digest",
+    # sync_all=False,
+    # keep_local=False
+    # timezone=None,
+)
 
-        If sync_all is set, all events will be pulled. Otherwise, only
-        the ones occuring after now will be.
-        """
+sync.synchronise()
 ```
 
 ## Examples
