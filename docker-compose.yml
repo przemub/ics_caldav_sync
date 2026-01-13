@@ -1,7 +1,7 @@
-version: "3.7"
 services:
   ics_caldav_sync:
     build:
-      context: "."
+      context: .
+    restart: unless-stopped
     env_file: ".env"
 

@@ -162,6 +162,8 @@ class ICSToCalDAV:
         If sync_all is set, all events will be pulled. Otherwise, only
         the ones occurring after now will be.
         """
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{timestamp}] Starting sync...", flush=True)
         now_naive = datetime.datetime.now()
         now_aware = datetime.datetime.now(datetime.timezone.utc)
         today = datetime.date.today()
@@ -188,7 +190,8 @@ class ICSToCalDAV:
                 logger.exception("Invalid event was downloaded from the remote. It will be skipped.")
             print("+", end="")
             sys.stdout.flush()
-        print()
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f" [{timestamp}]")
 
         if not self.keep_local:
             # Delete local events that don't exist in the remote
@@ -200,7 +203,8 @@ class ICSToCalDAV:
                 )
                 print("-", end="")
                 sys.stdout.flush()
-        print()
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f" [{timestamp}]")
 
 
 def getenv_or_raise(var):
