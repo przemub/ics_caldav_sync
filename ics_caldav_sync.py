@@ -203,8 +203,9 @@ class ICSToCalDAV:
                 )
                 print("-", end="")
                 sys.stdout.flush()
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f" [{timestamp}]")
+            if events_to_delete:
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                print(f" [{timestamp}]")
 
 
 def getenv_or_raise(var):
