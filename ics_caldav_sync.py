@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import datetime
+import json
 import logging
 import os
 import pathlib
@@ -218,35 +219,110 @@ def getenv_or_raise(var):
     return value
 
 
+def parse_sync_every(sync_every: str | None) -> str | None:
+    if sync_every is None:
+        return None
+    sync_every_value = "in " + sync_every
+    try:
+        arrow.utcnow().dehumanize(sync_every_value)
+    except ValueError as ve:
+        raise ValueError(
+            "SYNC_EVERY value is invalid. Try something like '2 minutes' or '1 hour'"
+        ) from ve
+    return sync_every_value
+
+
+def load_config(path: str) -> tuple[list[dict], str | None, bool]:
+    with open(path, "r", encoding="utf-8") as handle:
+        config = json.load(handle)
+
+    if not isinstance(config, dict):
+        raise ValueError("Config file must contain a JSON object at the top level.")
+
+    calendars = config.get("calendars")
+    if not isinstance(calendars, list) or not calendars:
+        raise ValueError("Config file must contain a non-empty 'calendars' list.")
+
+    defaults = config.get("defaults", {})
+    if defaults is None:
+        defaults = {}
+    if not isinstance(defaults, dict):
+        raise ValueError("Config 'defaults' must be a JSON object when provided.")
+
+    calendar_settings = []
+    for entry in calendars:
+        if not isinstance(entry, dict):
+            raise ValueError("Each calendar entry must be a JSON object.")
+        merged = {**defaults, **entry}
+        missing = [
+            key
+            for key in (
+                "remote_url",
+                "local_url",
+                "local_calendar_name",
+                "local_username",
+                "local_password",
+            )
+            if not merged.get(key)
+        ]
+        if missing:
+            raise ValueError(
+                "Calendar config missing required keys: " + ", ".join(missing)
+            )
+        calendar_settings.append(
+            {
+                "remote_url": merged["remote_url"],
+                "local_url": merged["local_url"],
+                "local_calendar_name": merged["local_calendar_name"],
+                "local_username": merged["local_username"],
+                "local_password": merged["local_password"],
+                "local_auth": merged.get("local_auth", "basic"),
+                "remote_username": merged.get("remote_username", ""),
+                "remote_password": merged.get("remote_password", ""),
+                "remote_auth": merged.get("remote_auth", "basic"),
+                "sync_all": merged.get("sync_all", False),
+                "keep_local": merged.get("keep_local", False),
+                "timezone": merged.get("timezone") or None,
+            }
+        )
+
+    sync_every = parse_sync_every(config.get("sync_every"))
+    debug = bool(config.get("debug", False))
+    return calendar_settings, sync_every, debug
+
+
 def main():
-    if os.getenv("DEBUG"):
+    config_path = os.getenv("CONFIG_PATH")
+    if config_path:
+        settings_list, sync_every, debug = load_config(config_path)
+    else:
+        settings_list = None
+        sync_every = None
+        debug = False
+
+    if debug or os.getenv("DEBUG"):
         logging.basicConfig(level=logging.DEBUG)
 
-    remote_urls = getenv_or_raise("REMOTE_URL").split(" ")
+    if settings_list is None:
+        remote_urls = getenv_or_raise("REMOTE_URL").split(" ")
 
-    settings = {
-        "local_url": getenv_or_raise("LOCAL_URL"),
-        "local_calendar_name": getenv_or_raise("LOCAL_CALENDAR_NAME"),
-        "local_username": getenv_or_raise("LOCAL_USERNAME"),
-        "local_password": getenv_or_raise("LOCAL_PASSWORD"),
-        "local_auth": os.getenv("LOCAL_AUTH", "basic"),
-        "remote_username": os.getenv("REMOTE_USERNAME", ""),
-        "remote_password": os.getenv("REMOTE_PASSWORD", ""),
-        "remote_auth": os.getenv("REMOTE_AUTH", "basic"),
-        "sync_all": bool(os.getenv("SYNC_ALL", False)),
-        "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
-        "timezone": os.getenv("TIMEZONE") or None,
-    }
-
-    sync_every = os.getenv("SYNC_EVERY", None)
-    if sync_every is not None:
-        sync_every = "in " + sync_every
-        try:
-            arrow.utcnow().dehumanize(sync_every)
-        except ValueError as ve:
-            raise ValueError(
-                "SYNC_EVERY value is invalid. Try something like '2 minutes' or '1 hour'"
-            ) from ve
+        settings = {
+            "local_url": getenv_or_raise("LOCAL_URL"),
+            "local_calendar_name": getenv_or_raise("LOCAL_CALENDAR_NAME"),
+            "local_username": getenv_or_raise("LOCAL_USERNAME"),
+            "local_password": getenv_or_raise("LOCAL_PASSWORD"),
+            "local_auth": os.getenv("LOCAL_AUTH", "basic"),
+            "remote_username": os.getenv("REMOTE_USERNAME", ""),
+            "remote_password": os.getenv("REMOTE_PASSWORD", ""),
+            "remote_auth": os.getenv("REMOTE_AUTH", "basic"),
+            "sync_all": bool(os.getenv("SYNC_ALL", False)),
+            "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
+            "timezone": os.getenv("TIMEZONE") or None,
+        }
+        settings_list = [
+            {"remote_url": remote_url, **settings} for remote_url in remote_urls
+        ]
+        sync_every = parse_sync_every(os.getenv("SYNC_EVERY", None))
 
     while True:
         if sync_every is None:
@@ -254,8 +330,8 @@ def main():
         else:
             next_run = arrow.utcnow().dehumanize(sync_every)
 
-        for remote_url in remote_urls:
-            ICSToCalDAV(remote_url=remote_url, **settings).synchronise()
+        for settings in settings_list:
+            ICSToCalDAV(**settings).synchronise()
 
         if next_run is None:
             break

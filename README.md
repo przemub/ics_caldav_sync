@@ -40,6 +40,45 @@ Set the settings as environment variables:
 | `DEBUG`               | boolean | No       | `false` | Set to any non-empty value to print debugging messages. Please set this when reporting an error.             |
 | `SYNC_ALL`            | boolean | No       | `false` | If set, all events in the calendar will be synced. Otherwise, only the ones occurring in the future will be. |
 | `KEEP_LOCAL`          | boolean | No       | `false` | Do not delete events on the CalDAV server that do not exist in the ICS file.                                 |
+| `CONFIG_PATH`         | string  | No       | -       | Path to a JSON config file defining multiple calendars (overrides the env var configuration).               |
+
+### Config file usage
+
+To sync multiple remote calendars into their own local CalDAV calendars, provide a JSON
+config file and point `CONFIG_PATH` to it. Each calendar entry can override defaults, so
+you can share credentials between entries while keeping separate calendars.
+
+```json
+{
+  "defaults": {
+    "local_url": "https://caldav.example.com",
+    "local_username": "username",
+    "local_password": "password",
+    "local_auth": "basic",
+    "sync_all": false,
+    "keep_local": false
+  },
+  "calendars": [
+    {
+      "remote_url": "https://example.com/calendars/team.ics",
+      "local_calendar_name": "Team Calendar"
+    },
+    {
+      "remote_url": "https://example.com/calendars/holidays.ics",
+      "local_calendar_name": "Holidays",
+      "timezone": "Europe/Warsaw"
+    }
+  ],
+  "sync_every": "30 minutes",
+  "debug": false
+}
+```
+
+Point to the file with:
+
+```shell
+CONFIG_PATH=/path/to/calendars.json ics_caldav_sync
+```
 
 ## Library usage
 
