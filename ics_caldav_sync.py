@@ -60,6 +60,7 @@ class ICSToCalDAV:
         sync_all: bool = False,
         keep_local: bool = False,
         timezone: str | None = None,
+        ignored_compare_fields: str,
     ):
         self.timezone = dateutil.tz.gettz(timezone) \
             if timezone is not None else None
@@ -91,6 +92,8 @@ class ICSToCalDAV:
 
         self.sync_all = sync_all
         self.keep_local = keep_local
+
+        self.ignored_compare_fields = ignored_compare_fields
 
     @staticmethod
     def _get_auth(username: str, password: str, method: AuthenticationMethod) -> requests.auth.AuthBase:
@@ -134,19 +137,35 @@ class ICSToCalDAV:
         return local_events_ids
 
 
-    @staticmethod
-    def _compare(fromlocal, fromremote) -> bool:
+    def _compare(self, fromlocal, fromremote) -> bool:
         """
         Compares a remote ics event with a local ical event
-        Currently just checks uid, that's not good enough, but is for tonight
         """
+        ignoredfields = []
+        if self.ignored_compare_fields != None:
+            ignoredfields = self.ignored_compare_fields.split(" ")
         def veventfromcal(vcal: icalendar.Calendar):
             for component in vcal._icalendar_instance.subcomponents:
                 if isinstance(component, icalendar.cal.Event):
                     return component
 
         local = veventfromcal(fromlocal)
-        return local.uid == fromremote.uid
+        logger.debug(local.keys())
+        logger.debug(fromremote.keys())
+        if not len(local.keys()) == len(fromremote.keys()):
+            return False
+        # go both ways in case there's the same number but different keys!
+        for key in local.keys():
+            if key not in ignoredfields:
+                if not local[key] == fromremote[key]:
+                    logger.debug("`%s`: `%s` != `%s`!",key,local[key],fromremote[key])
+                    return False
+        for key in fromremote.keys():
+            if key not in ignoredfields:
+                if not local[key] == fromremote[key]:
+                    logger.debug("`%s`: `%s` != `%s`!",key,local[key],fromremote[key])
+                    return False
+        return True
 
     @staticmethod
     def _wrap(vevent: icalendar.Event) -> bytes:
@@ -204,8 +223,6 @@ class ICSToCalDAV:
                 # If the event already exists and is what we would write, skip.
                 local_event_to_find = self.local_calendar.event_by_uid(remote_event.uid)
                 if local_event_to_find is not None:
-
-
                     if self._compare(local_event_to_find, remote_event):
                         logger.debug("Skipping event [%s] as it is identical",remote_event.uid)
                     else:
@@ -262,6 +279,7 @@ def main():
         "sync_all": bool(os.getenv("SYNC_ALL", False)),
         "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
         "timezone": os.getenv("TIMEZONE") or None,
+        "ignored_compare_fields": os.getenv("IGNORED_COMPARE_FIELDS") or None,
     }
 
     sync_every = os.getenv("SYNC_EVERY", None)
