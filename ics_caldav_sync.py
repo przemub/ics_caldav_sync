@@ -17,6 +17,7 @@ import requests.auth
 import vobject.base
 import x_wr_timezone
 
+import pprint
 
 logger = logging.getLogger(__name__)
 AuthenticationMethod = Literal["basic", "digest"]
@@ -132,6 +133,21 @@ class ICSToCalDAV:
         )
         return local_events_ids
 
+
+    @staticmethod
+    def _compare(fromlocal, fromremote) -> bool:
+        """
+        Compares a remote ics event with a local ical event
+        Currently just checks uid, that's not good enough, but is for tonight
+        """
+        def veventfromcal(vcal: icalendar.Calendar):
+            for component in vcal._icalendar_instance.subcomponents:
+                if isinstance(component, icalendar.cal.Event):
+                    return component
+
+        local = veventfromcal(fromlocal)
+        return local.uid == fromremote.uid
+
     @staticmethod
     def _wrap(vevent: icalendar.Event) -> bytes:
         """
@@ -148,7 +164,7 @@ class ICSToCalDAV:
         calendar.add_missing_timezones()
 
         data = calendar.to_ical()
-        logger.debug("Serialized event:\n%s", data)
+#        logger.debug("Serialized event:\n%s", data)
 
         return data
 
@@ -185,7 +201,18 @@ class ICSToCalDAV:
                         continue
 
             try:
-                self.local_calendar.save_event(self._wrap(remote_event))
+                # If the event already exists and is what we would write, skip.
+                local_event_to_find = self.local_calendar.event_by_uid(remote_event.uid)
+                if local_event_to_find is not None:
+
+
+                    if self._compare(local_event_to_find, remote_event):
+                        logger.debug("Skipping event [%s] as it is identical",remote_event.uid)
+                    else:
+                        self.local_calendar.save_event(self._wrap(remote_event))
+                else:
+                    self.local_calendar.save_event(self._wrap(remote_event))
+
             except vobject.base.ValidateError:
                 logger.exception("Invalid event was downloaded from the remote. It will be skipped.")
             print("+", end="")
@@ -206,7 +233,6 @@ class ICSToCalDAV:
             if events_to_delete:
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 print(f" [{timestamp}]")
-
 
 def getenv_or_raise(var):
     if (value := os.getenv(var)) is None:
