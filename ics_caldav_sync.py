@@ -17,8 +17,6 @@ import requests.auth
 import vobject.base
 import x_wr_timezone
 
-import pprint
-
 logger = logging.getLogger(__name__)
 AuthenticationMethod = Literal["basic", "digest"]
 
