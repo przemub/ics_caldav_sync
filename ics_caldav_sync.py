@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import datetime
+import importlib.metadata
 import logging
 import os
 import pathlib
@@ -253,8 +254,22 @@ def getenv_or_raise(var):
     if (value := os.getenv(var)) is None:
         print(f"\033[1mEnvironment variable {var} is unset.\033[0m\n", file=sys.stderr)
         # Printing help text
-        with open(pathlib.Path(__file__).parent / "README.md") as f:
-            print(f.read(), file=sys.stderr)
+        text = None
+        try:
+            text = importlib.metadata.metadata("ics_caldav_sync")["Description"]
+        except importlib.metadata.PackageNotFoundError:
+            try:
+                with open(pathlib.Path(__file__).parent / "README.md") as f:
+                    text = f.read()
+            except FileNotFoundError:
+                pass
+
+        if text:
+            from rich.console import Console
+            from rich.markdown import Markdown
+
+            Console().print(Markdown(text))
+
         sys.exit(1)
     return value
 

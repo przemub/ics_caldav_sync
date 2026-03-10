@@ -14,7 +14,7 @@ Look no further.
 Install the script with `pip install ics_caldav_sync`
 (or, if installing from source, `pip install .`) 
 and run `ics_caldav_sync` script which should be on your PATH now.
-Python 3.9 or higher is required.
+Python 3.10 or higher is required.
 
 There also exist `Dockerfile` and `docker-compose.yml` files so you can
 run it on your Docker server.

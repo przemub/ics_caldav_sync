@@ -1,6 +1,9 @@
 venv
-.venv
 *.pyc
 .env
-.gitignore
-.dockerignore
+.venv
+build
+dist
+ics_caldav_sync.egg-info
+test.sh
+.idea
