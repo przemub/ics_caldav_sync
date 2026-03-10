@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ics_caldav_sync"
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{name = "Przemysław Buczkowski", email = "prem@prem.moe"}]
 description = "ICS to CalDAV synchronisation."
 classifiers = [
@@ -16,7 +16,6 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
