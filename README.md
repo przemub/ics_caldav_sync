@@ -42,7 +42,7 @@ Set the settings as environment variables:
 | `KEEP_LOCAL`             | boolean | No       | `false` | Do not delete events on the CalDAV server that do not exist in the ICS file.                                 |
 | `IGNORED_COMPARE_FIELDS` | string  | No       | -       | When deciding if the local event is the same, ignore these fields*                                           |
 
-\* Google sets DTSTAMP to now() which causes an infinite overwrite which can be problematic with some CALDAV servers, and SEQUENCE can also be ignored when comparing all other fields.
+\* For Google Calendar, you can ignore DTSTAMP (changes with every download of the ICS) and SEQUENCE (reported to change randomly).
 
 ## Library usage
 
@@ -123,6 +123,7 @@ services:
 On the local side (CalDAV server):
 - [Baïkal](https://sabre.io/baikal/)
 - [Radicale](https://radicale.org/v3.html)
+- [xandikos](https://www.xandikos.org/)
 
 On the remote site (ICS file generator):
 - [Google Calendar](https://support.google.com/calendar/answer/37083)
