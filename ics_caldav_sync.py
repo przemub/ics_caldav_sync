@@ -212,8 +212,15 @@ def getenv_or_raise(var):
     if (value := os.getenv(var)) is None:
         print(f"\033[1mEnvironment variable {var} is unset.\033[0m\n", file=sys.stderr)
         # Printing help text
-        with open(pathlib.Path(__file__).parent / "README.md") as f:
-            print(f.read(), file=sys.stderr)
+        try:
+            from importlib.metadata import metadata
+            print(metadata("ics_caldav_sync").get_payload(), file=sys.stderr)
+        except Exception:
+            try:
+                with open(pathlib.Path(__file__).parent / "README.md") as f:
+                    print(f.read(), file=sys.stderr)
+            except FileNotFoundError:
+                pass
         sys.exit(1)
     return value
 
