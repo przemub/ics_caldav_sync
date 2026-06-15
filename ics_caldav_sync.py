@@ -168,8 +168,9 @@ class ICSToCalDAV:
         now_naive = datetime.datetime.now()
         now_aware = datetime.datetime.now(datetime.timezone.utc)
         today = datetime.date.today()
-
-        for remote_event in self.remote_calendar.events:
+    
+        sorted_remote_events = sorted(self.remote_calendar.events, key=lambda event: event.get("RECURRENCE-ID") is not None)
+        for remote_event in sorted_remote_events:
             # Skip events in the past, unless requested not to.
             if not self.sync_all:
                 end = remote_event.end
@@ -189,6 +190,11 @@ class ICSToCalDAV:
                 self.local_calendar.save_event(self._wrap(remote_event))
             except vobject.base.ValidateError:
                 logger.exception("Invalid event was downloaded from the remote. It will be skipped.")
+            except caldav.lib.error.PutError as e:
+                if "NoInstancesException" in str(e):
+                    logger.warning("Skipping event with no valid recurrence instances: %s", remote_event.get("UID"))
+                else:
+                    raise
             print("+", end="")
             sys.stdout.flush()
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
