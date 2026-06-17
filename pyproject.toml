@@ -36,23 +36,23 @@ dependencies = [
     "charset-normalizer==3.4.5",
     "click==8.3.1",
     "icalendar==7.0.3",
-    "idna==3.11",
-    "lxml==6.0.2",
+    "idna==3.15",
+    "lxml==6.1.0",
     "python-dateutil==2.9.0.post0",
     "pytz==2026.1.post1",
     "recurring-ical-events==3.8.1",
-    "requests==2.32.5",
+    "requests==2.33.0",
     "rich==14.3.3",
     "six==1.17.0",
     "tzdata==2025.3",
-    "urllib3==2.6.3",
+    "urllib3==2.7.0",
     "vobject==0.9.9",
     "x-wr-timezone==2.0.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "black==26.3.0",
+    "black==26.3.1",
     "build==1.4.0",
     "licensecheck==2025.1.0",
     "pytest==9.0.2",
