@@ -79,3 +79,50 @@ class TestSynchroniseUsesCompare:
         syncer.synchronise()
 
         syncer.local_calendar.save_event.assert_called_once()
+
+
+class TestSynchroniseOrdersRecurrence:
+    def test_parent_saved_before_recurrence_override(self, syncer):
+        """A recurrence override (RECURRENCE-ID) must be saved after its
+        parent, even when the ICS lists it first."""
+        parent = make_event(summary="Parent", uid="123", dtstamp=datetime(2025, 1, 1))
+        override = make_event(summary="Override", uid="123", dtstamp=datetime(2025, 1, 1))
+        override.add("RECURRENCE-ID", datetime(2025, 1, 2))
+        # Deliberately out of order: override first.
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[override, parent])
+        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+
+        syncer.synchronise()
+
+        saved = [call.args[0] for call in syncer.local_calendar.save_event.call_args_list]
+        assert len(saved) == 2
+        assert b"RECURRENCE-ID" not in saved[0]
+        assert b"RECURRENCE-ID" in saved[1]
+
+
+class TestSynchroniseHandlesPutError:
+    def test_skips_event_with_no_recurrence_instances(self, syncer):
+        """A sabre/dav NoInstancesException is logged and skipped, not fatal."""
+        event = make_event(summary="Empty rule", uid="123", dtstamp=datetime(2025, 1, 1))
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[event])
+        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+        syncer.local_calendar.save_event.side_effect = caldav.lib.error.PutError(
+            "400 Bad Request\n\n<s:exception>Sabre\\VObject\\Recur\\NoInstancesException</s:exception>"
+        )
+
+        # Should not raise.
+        syncer.synchronise()
+
+        syncer.local_calendar.save_event.assert_called_once()
+
+    def test_other_put_errors_propagate(self, syncer):
+        """A PutError that is not a NoInstancesException must still be fatal."""
+        event = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 1, 1))
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[event])
+        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+        syncer.local_calendar.save_event.side_effect = caldav.lib.error.PutError(
+            "403 Forbidden\n\nPermission denied"
+        )
+
+        with pytest.raises(caldav.lib.error.PutError):
+            syncer.synchronise()
