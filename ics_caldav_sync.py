@@ -196,8 +196,15 @@ class ICSToCalDAV:
         now_naive = datetime.datetime.now()
         now_aware = datetime.datetime.now(datetime.timezone.utc)
         today = datetime.date.today()
-    
-        sorted_remote_events = sorted(self.remote_calendar.events, key=lambda event: event.get("RECURRENCE-ID") is not None)
+
+        # ICS files give no ordering guarantee, but a recurrence override
+        # (an event with RECURRENCE-ID) can only be saved after its parent
+        # recurring event exists locally. Sort so parents come first; the
+        # sort is stable, so the original order is otherwise preserved.
+        sorted_remote_events = sorted(
+            self.remote_calendar.events,
+            key=lambda event: event.get("RECURRENCE-ID") is not None,
+        )
         for remote_event in sorted_remote_events:
             # Skip events in the past, unless requested not to.
             if not self.sync_all:
@@ -229,8 +236,14 @@ class ICSToCalDAV:
             except vobject.base.ValidateError:
                 logger.exception("Invalid event was downloaded from the remote. It will be skipped.")
             except caldav.lib.error.PutError as e:
+                # An event whose recurrence rule yields zero occurrences is
+                # valid per RFC 5545 but rejected by sabre/dav-based servers
+                # (Baikal, Nextcloud). caldav has no typed exception for this,
+                # so we match on the sabre exception class name that the server
+                # echoes back in the response body. This is server-dependent
+                # and may not catch the same condition on non-sabre servers.
                 if "NoInstancesException" in str(e):
-                    logger.warning("Skipping event with no valid recurrence instances: %s", remote_event.get("UID"))
+                    logger.warning("Skipping event with no valid recurrence instances: %s", remote_event.uid)
                 else:
                     raise
             print("+", end="")
