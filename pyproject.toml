@@ -55,6 +55,7 @@ dev = [
     "black==26.3.0",
     "build==1.4.0",
     "licensecheck==2025.1.0",
+    "pytest==9.0.2",
     "types-python-dateutil==2.9.0.20260305",
     "twine==6.2.0",
     "vermin==1.8.0"

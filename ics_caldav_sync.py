@@ -6,6 +6,7 @@ import os
 import pathlib
 import sys
 import time
+from copy import copy
 from typing import Literal
 
 import arrow
@@ -15,6 +16,7 @@ import dateutil.tz
 import icalendar
 import requests
 import requests.auth
+import urllib3
 import vobject.base
 import x_wr_timezone
 
@@ -37,12 +39,15 @@ class ICSToCalDAV:
     * local_username (str): CalDAV username.
     * local_password (str): CalDAV password.
     * local_auth (str, optional): CalDAV authentication method (either basic or digest).
+    * local_tls_verify (bool, optional): Verify the CalDAV server's TLS certificate. Set to False for self-signed certificates.
     * remote_username (str, optional): ICS host username.
     * remote_password (str, optional): ICS host password.
     * remote_auth (str, optional): ICS host authentication method (either basic or digest).
+    * remote_tls_verify (bool, optional): Verify the ICS host's TLS certificate. Set to False for self-signed certificates.
     * sync_all (bool, optional): Sync past events.
     * keep_local (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
     * timezone (str, optional): Override events timezone. See: https://dateutil.readthedocs.io/en/stable/tz.html
+    * ignored_compare_fields(str, optional): Fields that are ignored when checking if an event needs to be updated.
     """
 
     def __init__(
@@ -54,12 +59,15 @@ class ICSToCalDAV:
         local_username: str,
         local_password: str,
         local_auth: AuthenticationMethod = "basic",
+        local_tls_verify: bool = True,
         remote_username: str = "",
         remote_password: str = "",
         remote_auth: AuthenticationMethod = "basic",
+        remote_tls_verify: bool = True,
         sync_all: bool = False,
         keep_local: bool = False,
         timezone: str | None = None,
+        ignored_compare_fields: str | None = None,
     ):
         self.timezone = dateutil.tz.gettz(timezone) \
             if timezone is not None else None
@@ -69,7 +77,8 @@ class ICSToCalDAV:
 
         self.local_client = caldav.DAVClient(
             url=local_url,
-            auth=self._get_auth(local_username, local_password, local_auth)
+            auth=self._get_auth(local_username, local_password, local_auth),
+            ssl_verify_cert=local_tls_verify,
         )
 
         self.local_calendar = self.local_client.principal().calendar(
@@ -79,7 +88,8 @@ class ICSToCalDAV:
         remote_calendar = icalendar.Calendar.from_ical(
             requests.get(
                 remote_url,
-                auth=self._get_auth(remote_username, remote_password, remote_auth)
+                auth=self._get_auth(remote_username, remote_password, remote_auth),
+                verify=remote_tls_verify,
             ).text
         )
 
@@ -91,6 +101,8 @@ class ICSToCalDAV:
 
         self.sync_all = sync_all
         self.keep_local = keep_local
+
+        self.ignored_compare_fields = ignored_compare_fields.split(" ") if ignored_compare_fields else []
 
     @staticmethod
     def _get_auth(username: str, password: str, method: AuthenticationMethod) -> requests.auth.AuthBase:
@@ -132,6 +144,22 @@ class ICSToCalDAV:
             e.icalendar_component.get("uid") for e in local_events
         )
         return local_events_ids
+
+    def _compare(
+        self,
+        local_event: icalendar.Component,
+        remote_event: icalendar.Component
+    ) -> bool:
+        """
+        Compares two icalendar.Component objects, respecting ignored_compare_fields setting.
+        """
+        local_event = copy(local_event)
+        remote_event = copy(remote_event)
+        for field in self.ignored_compare_fields:
+            local_event.pop(field, None)
+            remote_event.pop(field, None)
+
+        return local_event == remote_event
 
     @staticmethod
     def _wrap(vevent: icalendar.Event) -> bytes:
@@ -186,6 +214,16 @@ class ICSToCalDAV:
                     if now_naive > end:
                         continue
 
+            # If the event already exists and is what we would write, skip.
+            try:
+                local_event = self.local_calendar.get_event_by_uid(remote_event.uid).icalendar_component
+                if self._compare(local_event, remote_event):
+                    logger.debug("Skipping event [%s] as it is identical", remote_event.uid)
+                    continue
+            except caldav.lib.error.NotFoundError:
+                pass
+
+            # All checks passed, save the event
             try:
                 self.local_calendar.save_event(self._wrap(remote_event))
             except vobject.base.ValidateError:
@@ -251,13 +289,24 @@ def main():
         "local_username": getenv_or_raise("LOCAL_USERNAME"),
         "local_password": getenv_or_raise("LOCAL_PASSWORD"),
         "local_auth": os.getenv("LOCAL_AUTH", "basic"),
+        "local_tls_verify": not os.getenv("LOCAL_TLS_NO_VERIFY", False),
         "remote_username": os.getenv("REMOTE_USERNAME", ""),
         "remote_password": os.getenv("REMOTE_PASSWORD", ""),
         "remote_auth": os.getenv("REMOTE_AUTH", "basic"),
+        "remote_tls_verify": not os.getenv("REMOTE_TLS_NO_VERIFY", False),
         "sync_all": bool(os.getenv("SYNC_ALL", False)),
         "keep_local": bool(os.getenv("KEEP_LOCAL", False)),
         "timezone": os.getenv("TIMEZONE") or None,
+        "ignored_compare_fields": os.getenv("IGNORED_COMPARE_FIELDS") or None,
     }
+
+    if not settings["local_tls_verify"] or not settings["remote_tls_verify"]:
+        logger.warning(
+            "TLS certificate verification is disabled. This connection is "
+            "vulnerable to man-in-the-middle attacks. Further insecure request "
+            "warnings will be suppressed."
+        )
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     sync_every = os.getenv("SYNC_EVERY", None)
     if sync_every is not None:
