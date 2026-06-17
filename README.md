@@ -40,7 +40,7 @@ Set the settings as environment variables:
 | `DEBUG`                  | boolean | No       | `false` | Set to any non-empty value to print debugging messages. Please set this when reporting an error.             |
 | `SYNC_ALL`               | boolean | No       | `false` | If set, all events in the calendar will be synced. Otherwise, only the ones occurring in the future will be. |
 | `KEEP_LOCAL`             | boolean | No       | `false` | Do not delete events on the CalDAV server that do not exist in the ICS file.                                 |
-| `IGNORED_COMPARE_FIELDS` | string  | No       | -       | When deciding if the local event is the same, ignore these fields*                                           |
+| `IGNORED_COMPARE_FIELDS` | string  | No       | -       | Fields that are ignored when checking if an event needs to be updated.*                                      |
 
 \* For Google Calendar, you can ignore DTSTAMP (changes with every download of the ICS) and SEQUENCE (reported to change randomly).
 
@@ -63,6 +63,7 @@ sync = ICSToCalDAVSync(
     # sync_all=False,
     # keep_local=False
     # timezone=None,
+    # ignored_compare_fields=[]
 )
 
 sync.synchronise()

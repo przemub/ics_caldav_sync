@@ -44,6 +44,7 @@ class ICSToCalDAV:
     * sync_all (bool, optional): Sync past events.
     * keep_local (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
     * timezone (str, optional): Override events timezone. See: https://dateutil.readthedocs.io/en/stable/tz.html
+    * ignored_compare_fields(str, optional): Fields that are ignored when checking if an event needs to be updated.
     """
 
     def __init__(
