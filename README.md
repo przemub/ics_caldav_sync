@@ -38,7 +38,7 @@ Set the settings as environment variables:
 | `REMOTE_AUTH`            | string  | No       | `basic` | ICS host authentication method (either `basic` or `digest`).                                                 |
 | `REMOTE_TLS_NO_VERIFY`   | boolean | No       | `false` | Set to any non-empty value to skip TLS certificate verification for the ICS host (e.g. self-signed).         |
 | `TIMEZONE`               | string  | No       | -       | Override events timezone. Examples: `Utc`, `Europe/Warsaw`, `Asia/Tokyo`.                                    |
-| `SYNC_EVERY`             | string  | No       | -       | How often should the synchronisation occur? Examples: `2 minutes`, `1 hour`. Synchronise once if empty.      |
+| `SYNC_EVERY`             | string  | No       | -       | How often should the synchronisation occur? Examples: `30 minutes`, `an hour`. Synchronise once if empty.      |
 | `DEBUG`                  | boolean | No       | `false` | Set to any non-empty value to print debugging messages. Please set this when reporting an error.             |
 | `SYNC_ALL`               | boolean | No       | `false` | If set, all events in the calendar will be synced. Otherwise, only the ones occurring in the future will be. |
 | `KEEP_LOCAL`             | boolean | No       | `false` | Do not delete events on the CalDAV server that do not exist in the ICS file.                                 |

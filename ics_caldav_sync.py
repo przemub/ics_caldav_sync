@@ -121,7 +121,7 @@ class ICSToCalDAV:
                 username,
                 password
             )
-        raise ValueError("Invalid authentication method %s", method)
+        raise ValueError(f"Invalid authentication method {method}")
 
     def _get_local_events_ids(self) -> set[str]:
         """
@@ -328,7 +328,7 @@ def main():
             arrow.utcnow().dehumanize(sync_every)
         except ValueError as ve:
             raise ValueError(
-                "SYNC_EVERY value is invalid. Try something like '2 minutes' or '1 hour'"
+                "SYNC_EVERY value is invalid. Try something like '30 minutes' or 'an hour'"
             ) from ve
 
     while True:
