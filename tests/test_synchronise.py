@@ -1,9 +1,11 @@
-from datetime import datetime
+"""Unit-test the synchronise method."""
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, PropertyMock
 
 import caldav.lib.error
 import icalendar
 import pytest
+import vobject.base
 
 from ics_caldav_sync import ICSToCalDAV
 
@@ -98,6 +100,138 @@ class TestSynchroniseOrdersRecurrence:
         assert len(saved) == 2
         assert b"RECURRENCE-ID" not in saved[0]
         assert b"RECURRENCE-ID" in saved[1]
+
+
+class TestSynchronisePastEventFiltering:
+    """When sync_all is off, events that have already ended are skipped.
+
+    The fixture defaults to sync_all=True, which bypasses this whole block, so
+    each test here flips it off. Dates are deliberately far in the past (2000)
+    or future (2099) so the result never depends on the wall clock.
+    """
+
+    def _run(self, syncer, event):
+        syncer.sync_all = False
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[event])
+        syncer.local_calendar.get_event_by_uid.side_effect = (
+            caldav.lib.error.NotFoundError
+        )
+        syncer.synchronise()
+
+    # All-day events: end is a date.
+    def test_all_day_past_skipped(self, syncer):
+        event = make_event(uid="1", dtstart=date(2000, 1, 1), dtend=date(2000, 1, 2))
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_not_called()
+
+    def test_all_day_future_saved(self, syncer):
+        event = make_event(uid="1", dtstart=date(2099, 1, 1), dtend=date(2099, 1, 2))
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_called_once()
+
+    def test_all_day_ending_today_is_kept(self, syncer):
+        # Boundary: the filter is `today > end`, so an event ending exactly
+        # today is NOT in the past and must be saved.
+        today = date.today()
+        event = make_event(uid="1", dtstart=today, dtend=today)
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_called_once()
+
+    def test_all_day_ending_yesterday_is_skipped(self, syncer):
+        yesterday = date.today() - timedelta(days=1)
+        event = make_event(uid="1", dtstart=yesterday, dtend=yesterday)
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_not_called()
+
+    # Naive datetimes: compared against datetime.now().
+    def test_naive_past_skipped(self, syncer):
+        event = make_event(
+            uid="1", dtstart=datetime(2000, 1, 1, 12), dtend=datetime(2000, 1, 1, 13)
+        )
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_not_called()
+
+    def test_naive_future_saved(self, syncer):
+        event = make_event(
+            uid="1", dtstart=datetime(2099, 1, 1, 12), dtend=datetime(2099, 1, 1, 13)
+        )
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_called_once()
+
+    # Aware datetimes: compared against datetime.now(timezone.utc).
+    def test_aware_past_skipped(self, syncer):
+        event = make_event(
+            uid="1",
+            dtstart=datetime(2000, 1, 1, 12, tzinfo=timezone.utc),
+            dtend=datetime(2000, 1, 1, 13, tzinfo=timezone.utc),
+        )
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_not_called()
+
+    def test_aware_future_saved(self, syncer):
+        event = make_event(
+            uid="1",
+            dtstart=datetime(2099, 1, 1, 12, tzinfo=timezone.utc),
+            dtend=datetime(2099, 1, 1, 13, tzinfo=timezone.utc),
+        )
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_called_once()
+
+
+class TestSynchroniseDeleteBranch:
+    """When keep_local is off, local events absent from the remote are deleted."""
+
+    def test_deletes_stale_local_event(self, syncer):
+        syncer.keep_local = False
+        remote = make_event(summary="Kept", uid="A", dtstamp=datetime(2025, 1, 1))
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
+        syncer.local_calendar.get_event_by_uid.side_effect = (
+            caldav.lib.error.NotFoundError
+        )
+        # Local has A (in remote) and B (stale) -> only B should be deleted.
+        syncer._get_local_events_ids = MagicMock(return_value={"A", "B"})
+
+        syncer.synchronise()
+
+        # Only the stale event (B) is deleted; the one still in the remote (A)
+        # is left alone.
+        syncer.local_client.delete.assert_called_once()
+        deleted_url = syncer.local_client.delete.call_args.args[0]
+        assert "B.ics" in deleted_url
+        assert "A.ics" not in deleted_url
+
+    def test_no_deletion_when_nothing_stale(self, syncer):
+        syncer.keep_local = False
+        remote = make_event(summary="Kept", uid="A", dtstamp=datetime(2025, 1, 1))
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
+        syncer.local_calendar.get_event_by_uid.side_effect = (
+            caldav.lib.error.NotFoundError
+        )
+        syncer._get_local_events_ids = MagicMock(return_value={"A"})
+
+        syncer.synchronise()
+
+        syncer.local_client.delete.assert_not_called()
+
+
+class TestSynchroniseValidateError:
+    def test_invalid_event_is_skipped_not_fatal(self, syncer):
+        """A vobject ValidateError on save is logged and skipped; later events
+        are still processed."""
+        a = make_event(summary="Bad", uid="A", dtstamp=datetime(2025, 1, 1))
+        b = make_event(summary="AlsoBad", uid="B", dtstamp=datetime(2025, 1, 1))
+        type(syncer.remote_calendar).events = PropertyMock(return_value=[a, b])
+        syncer.local_calendar.get_event_by_uid.side_effect = (
+            caldav.lib.error.NotFoundError
+        )
+        syncer.local_calendar.save_event.side_effect = vobject.base.ValidateError(
+            "invalid"
+        )
+
+        # Should not raise, and both events should have been attempted.
+        syncer.synchronise()
+
+        assert syncer.local_calendar.save_event.call_count == 2
 
 
 class TestSynchroniseHandlesPutError:

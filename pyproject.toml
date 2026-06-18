@@ -56,6 +56,8 @@ dev = [
     "build==1.5.0",
     "licensecheck==2026.0.5; python_version >= '3.12'",
     "pytest==9.1.0",
+    "pytest-cov==7.1.0",
+    "radicale==3.7.5",
     "types-python-dateutil==2.9.0.20260518",
     "twine==6.2.0",
     "vermin==1.8.0"
@@ -66,3 +68,14 @@ ics_caldav_sync = "ics_caldav_sync:main"
 
 [project.urls]
 Repository = "https://github.com/przemub/ics_caldav_sync"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--cov=ics_caldav_sync --cov-report=term-missing"
+markers = [
+    "integration: real CalDAV round-trip against in-process Radicale",
+]
+
+[tool.coverage.run]
+source = ["ics_caldav_sync"]

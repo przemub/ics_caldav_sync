@@ -20,4 +20,4 @@ jobs:
     - name: Install dependencies
       run: pip install -e ".[dev]"
     - name: Run tests
-      run: pytest
+      run: pytest --cov-fail-under=100

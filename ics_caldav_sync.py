@@ -348,5 +348,5 @@ def main():
                 time.sleep(seconds_to_next)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
