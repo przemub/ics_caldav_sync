@@ -14,6 +14,7 @@ import caldav
 import caldav.lib.error
 import dateutil.tz
 import icalendar
+import recurring_ical_events
 import requests
 import requests.auth
 import urllib3
@@ -120,10 +121,8 @@ class ICSToCalDAV:
         self._update_captured_now()
 
     def _update_captured_now(self):
-        """Captures reference time for _is_past."""
-        self._now_naive: datetime.datetime = datetime.datetime.now()
-        self._now_aware: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
-        self._today: datetime.date = datetime.date.today()
+        """Captures reference time for _has_upcoming_occurrence."""
+        self._now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
 
     @staticmethod
     def _get_auth(username: str, password: str, method: AuthenticationMethod) -> requests.auth.AuthBase:
@@ -191,19 +190,20 @@ class ICSToCalDAV:
         recurrence_id = event.get("RECURRENCE-ID")
         return recurrence_id.to_ical() if recurrence_id is not None else b""
 
-    def _is_past(self, event: icalendar.Component) -> bool:
+    def _has_upcoming_occurrence(self, events: list[icalendar.Component]) -> bool:
         """
-        Whether an event has already ended, comparing its end against the
-        matching "now" captured at the start of synchronise(): a date, or a
-        naive- or aware- datetime.
-        https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
+        Whether a UID group (a single event, or a recurring event with its
+        RECURRENCE-ID overrides) still has an occurrence ending after the
+        "now" captured at the start of synchronise().
+        Recurrence rules are expanded, so a series that started in the past
+        counts as upcoming for as long as it has occurrences left — comparing
+        the parent's own end would look only at the FIRST occurrence.
         """
-        end = event.end
-        if isinstance(end, datetime.date) and not isinstance(end, datetime.datetime):
-            return self._today > end
-        if end.tzinfo is not None and end.tzinfo.utcoffset(end) is not None:
-            return self._now_aware > end
-        return self._now_naive > end
+        calendar = icalendar.Calendar()
+        for event in events:
+            calendar.add_component(event)
+        upcoming = recurring_ical_events.of(calendar).after(self._now)
+        return next(iter(upcoming), None) is not None
 
     def _matches_stored(
         self,
@@ -281,9 +281,9 @@ class ICSToCalDAV:
             events_by_uid.setdefault(uid, []).append(remote_event)
 
         for uid, events in events_by_uid.items():
-            # Skip the group if every event in it is in the past, unless
+            # Skip the group if nothing in it occurs any more, unless
             # requested not to.
-            if not self.sync_all and all(self._is_past(event) for event in events):
+            if not self.sync_all and not self._has_upcoming_occurrence(events):
                 continue
 
             # If what is already stored is what we would write, skip.

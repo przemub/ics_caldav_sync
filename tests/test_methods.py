@@ -150,14 +150,13 @@ class TestMatchesStored:
 
 
 class TestUpdateCapturedNow:
-    def test_captured_nows_match_their_names(self):
-        # _is_past compares aware event ends against _now_aware; if it were
-        # naive, the comparison would raise TypeError.
+    def test_captured_now_is_timezone_aware(self):
+        # _has_upcoming_occurrence queries recurrence expansion with _now; an
+        # aware UTC timestamp compares correctly against every event flavour.
         obj = object.__new__(ICSToCalDAV)
         obj._update_captured_now()
-        assert obj._now_aware.tzinfo is not None
-        assert obj._now_aware.tzinfo.utcoffset(obj._now_aware) is not None
-        assert obj._now_naive.tzinfo is None
+        assert obj._now.tzinfo is not None
+        assert obj._now.tzinfo.utcoffset(obj._now) is not None
 
 
 def make_local_event(uid):

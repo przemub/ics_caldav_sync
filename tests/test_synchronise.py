@@ -122,74 +122,116 @@ class TestSynchroniseGroupsRecurrence:
         assert b"SUMMARY:Override" in payload
 
 
-class TestIsPast:
-    """_is_past picks the right "now" for date / naive- / aware-datetime ends.
+class TestHasUpcomingOccurrence:
+    """_has_upcoming_occurrence expands recurrence rules, so an ongoing series
+    whose first occurrence is long past still counts as upcoming, while an
+    exhausted one does not.
 
-    A fixed reference time is injected so the boundaries are exact and the
-    result never depends on the wall clock.
+    A fixed reference time is injected so the results never depend on the
+    wall clock.
     """
 
-    NOW_NAIVE = datetime(2025, 6, 1, 12, 0, 0)
-    NOW_AWARE = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
-    TODAY = date(2025, 6, 1)
+    NOW = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
 
-    def is_past(self, event):
+    def has_upcoming(self, *events):
         obj = object.__new__(ICSToCalDAV)
-        obj._now_naive = self.NOW_NAIVE
-        obj._now_aware = self.NOW_AWARE
-        obj._today = self.TODAY
-        return obj._is_past(event)
+        obj._now = self.NOW
+        return obj._has_upcoming_occurrence(list(events))
 
-    # All-day events compare end (a date) against today with `today > end`.
-    def test_date_before_today_is_past(self):
-        assert self.is_past(
-            make_event(dtstart=date(2025, 5, 30), dtend=date(2025, 5, 31))
-        )
-
-    def test_date_equal_today_is_not_past(self):
-        # Boundary: ending exactly today is NOT past.
-        assert not self.is_past(make_event(dtstart=self.TODAY, dtend=self.TODAY))
-
-    def test_date_after_today_is_not_past(self):
-        assert not self.is_past(
-            make_event(dtstart=date(2025, 6, 2), dtend=date(2025, 6, 3))
-        )
-
-    # Naive datetimes compare against now_naive.
-    def test_naive_before_now_is_past(self):
-        assert self.is_past(
+    # Single events of every date flavour.
+    def test_aware_past_event(self):
+        assert not self.has_upcoming(
             make_event(
-                dtstart=datetime(2025, 6, 1, 10), dtend=datetime(2025, 6, 1, 11)
-            )
-        )
-
-    def test_naive_after_now_is_not_past(self):
-        assert not self.is_past(
-            make_event(
-                dtstart=datetime(2025, 6, 1, 13), dtend=datetime(2025, 6, 1, 14)
-            )
-        )
-
-    # Aware datetimes compare against now_aware.
-    def test_aware_before_now_is_past(self):
-        assert self.is_past(
-            make_event(
+                uid="1",
                 dtstart=datetime(2025, 6, 1, 10, tzinfo=timezone.utc),
                 dtend=datetime(2025, 6, 1, 11, tzinfo=timezone.utc),
             )
         )
 
-    def test_aware_after_now_is_not_past(self):
-        assert not self.is_past(
+    def test_aware_future_event(self):
+        assert self.has_upcoming(
             make_event(
+                uid="1",
                 dtstart=datetime(2025, 6, 1, 13, tzinfo=timezone.utc),
                 dtend=datetime(2025, 6, 1, 14, tzinfo=timezone.utc),
             )
         )
 
+    def test_naive_past_and_future_events(self):
+        assert not self.has_upcoming(
+            make_event(
+                uid="1", dtstart=datetime(2025, 6, 1, 10), dtend=datetime(2025, 6, 1, 11)
+            )
+        )
+        assert self.has_upcoming(
+            make_event(
+                uid="1", dtstart=datetime(2025, 6, 1, 13), dtend=datetime(2025, 6, 1, 14)
+            )
+        )
+
+    def test_all_day_past_and_future_events(self):
+        assert not self.has_upcoming(
+            make_event(uid="1", dtstart=date(2025, 5, 30), dtend=date(2025, 5, 31))
+        )
+        assert self.has_upcoming(
+            make_event(uid="1", dtstart=date(2025, 6, 2), dtend=date(2025, 6, 3))
+        )
+
+    # Recurrence expansion — the reason this method exists.
+    def test_open_ended_series_with_past_start_is_upcoming(self):
+        """The first occurrence ended in 2024, but the RRULE is open-ended, so
+        the series is still ongoing. Comparing the parent's own end (the old
+        check) would wrongly classify it as past."""
+        assert self.has_upcoming(
+            make_event(
+                uid="1",
+                dtstart=datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
+                dtend=datetime(2024, 1, 1, 11, tzinfo=timezone.utc),
+                rrule={"FREQ": "WEEKLY"},
+            )
+        )
+
+    def test_series_with_until_in_the_past_is_not_upcoming(self):
+        assert not self.has_upcoming(
+            make_event(
+                uid="1",
+                dtstart=datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
+                dtend=datetime(2024, 1, 1, 11, tzinfo=timezone.utc),
+                rrule={"FREQ": "WEEKLY", "UNTIL": datetime(2024, 3, 1, tzinfo=timezone.utc)},
+            )
+        )
+
+    def test_series_with_exhausted_count_is_not_upcoming(self):
+        assert not self.has_upcoming(
+            make_event(
+                uid="1",
+                dtstart=datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
+                dtend=datetime(2024, 1, 1, 11, tzinfo=timezone.utc),
+                rrule={"FREQ": "WEEKLY", "COUNT": 3},
+            )
+        )
+
+    def test_ended_series_with_future_override_is_upcoming(self):
+        """An override can move one occurrence of an otherwise-ended series
+        into the future; the whole group must then be kept."""
+        parent = make_event(
+            uid="1",
+            dtstart=datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
+            dtend=datetime(2024, 1, 1, 11, tzinfo=timezone.utc),
+            rrule={"FREQ": "WEEKLY", "COUNT": 3},
+        )
+        override = make_event(
+            uid="1",
+            dtstart=datetime(2099, 1, 15, 10, tzinfo=timezone.utc),
+            dtend=datetime(2099, 1, 15, 11, tzinfo=timezone.utc),
+        )
+        override.add("RECURRENCE-ID", datetime(2024, 1, 15, 10, tzinfo=timezone.utc))
+        assert self.has_upcoming(parent, override)
+
 
 class TestSynchronisePastEventFiltering:
-    """synchronise() applies _is_past per UID group when sync_all is off."""
+    """synchronise() applies _has_upcoming_occurrence per UID group when
+    sync_all is off."""
 
     _past = date.today() - timedelta(days=365)
     _future = date.today() + timedelta(days=365)
@@ -227,6 +269,28 @@ class TestSynchronisePastEventFiltering:
         override = make_event(uid="1", dtstart=self._past + timedelta(days=180), dtend=self._past + timedelta(days=181))
         override.add("RECURRENCE-ID", self._past + timedelta(days=180))
         self._run(syncer, parent, override)
+        syncer.local_calendar.save_event.assert_not_called()
+
+    def test_ongoing_series_with_past_first_occurrence_is_saved(self, syncer):
+        """A series whose first occurrence ended long ago but whose RRULE is
+        open-ended is still ongoing and must sync."""
+        event = make_event(
+            uid="1",
+            dtstart=datetime(2024, 1, 1, 10),
+            dtend=datetime(2024, 1, 1, 11),
+            rrule={"FREQ": "WEEKLY"},
+        )
+        self._run(syncer, event)
+        syncer.local_calendar.save_event.assert_called_once()
+
+    def test_exhausted_series_is_skipped(self, syncer):
+        event = make_event(
+            uid="1",
+            dtstart=datetime(2024, 1, 1, 10),
+            dtend=datetime(2024, 1, 1, 11),
+            rrule={"FREQ": "WEEKLY", "COUNT": 3},
+        )
+        self._run(syncer, event)
         syncer.local_calendar.save_event.assert_not_called()
 
 
