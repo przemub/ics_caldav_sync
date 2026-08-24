@@ -12,6 +12,7 @@ import caldav
 import icalendar
 import pytest
 
+import ics_caldav_sync
 from ics_caldav_sync import ICSToCalDAV
 from tests.utils import load_fixture
 
@@ -243,6 +244,54 @@ class TestDeletion:
         syncer.remote_calendar = icalendar.Calendar()
         syncer.synchronise()
         assert len(syncer.local_calendar.events()) == 1
+
+
+class TestMultipleFeeds:
+    def test_feeds_do_not_delete_each_other(self, caldav_url, monkeypatch):
+        """Multiple REMOTE_URLs sync into one local calendar, so the deletion
+        pass must compare against the union of the feeds; comparing against
+        one feed at a time would wipe the other feeds' events on every run."""
+        template = (
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//x//EN\r\n"
+            "BEGIN:VEVENT\r\nUID:{uid}\r\nSUMMARY:{uid}\r\n"
+            "DTSTART:20990101T120000Z\r\nDTEND:20990101T130000Z\r\n"
+            "DTSTAMP:20250101T000000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+        feeds = {
+            "https://a.example/a.ics": template.format(uid="from-feed-a"),
+            "https://b.example/b.ics": template.format(uid="from-feed-b"),
+        }
+        monkeypatch.setattr(
+            ics_caldav_sync.requests,
+            "get",
+            lambda url, **kwargs: MagicMock(text=feeds[url]),
+        )
+        # __init__ looks the calendar up by name, so create it beforehand.
+        client = caldav.DAVClient(
+            url=caldav_url, username=USERNAME, password=PASSWORD
+        )
+        client.principal().make_calendar(name="integration")
+
+        def build():
+            """A fresh instance per pass, as main() creates on every cycle."""
+            return ICSToCalDAV(
+                remote_url=list(feeds),
+                local_url=caldav_url,
+                local_calendar_name="integration",
+                local_username=USERNAME,
+                local_password=PASSWORD,
+                sync_all=True,
+                keep_local=False,
+            )
+
+        build().synchronise()
+        first_syncer = build()
+        assert stored_uids(first_syncer) == {"from-feed-a", "from-feed-b"}
+
+        # The second pass must leave both feeds' events in place.
+        second_syncer = build()
+        second_syncer.synchronise()
+        assert stored_uids(second_syncer) == {"from-feed-a", "from-feed-b"}
 
 
 class TestRecurrence:

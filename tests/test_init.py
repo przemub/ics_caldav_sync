@@ -68,6 +68,31 @@ class TestInit:
         assert obj.timezone is None
         assert obj.ignored_compare_fields == []
 
+    def test_multiple_remote_urls_are_merged(self, mocked_clients):
+        """A list of URLs is fetched feed by feed and their events end up in
+        the one remote calendar, so deletion later sees the union of feeds."""
+        _, get = mocked_clients
+        template = (
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//x//x//EN\r\n"
+            "BEGIN:VEVENT\r\nUID:{uid}\r\nDTSTART:20250101T120000Z\r\n"
+            "END:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+        get.side_effect = [
+            MagicMock(text=template.format(uid="a")),
+            MagicMock(text=template.format(uid="b")),
+        ]
+
+        obj = ICSToCalDAV(
+            **base_kwargs(
+                remote_url=["https://a.example/a.ics", "https://b.example/b.ics"]
+            )
+        )
+
+        assert get.call_count == 2
+        fetched = [c.args[0] for c in get.call_args_list]
+        assert fetched == ["https://a.example/a.ics", "https://b.example/b.ics"]
+        assert {e["UID"] for e in obj.remote_calendar.events} == {"a", "b"}
+
     def test_tls_verification_flags_are_propagated(self, mocked_clients):
         dav, get = mocked_clients
         ICSToCalDAV(

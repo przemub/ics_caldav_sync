@@ -47,14 +47,15 @@ def mock_cls(monkeypatch):
 
 
 class TestMainLoop:
-    def test_runs_once_per_remote_url_then_breaks(self, env, mock_cls):
-        # SYNC_EVERY unset -> single pass over both REMOTE_URLs, then break.
+    def test_single_pass_syncs_all_remote_urls_then_breaks(self, env, mock_cls):
+        # SYNC_EVERY unset -> one pass, then break. Both REMOTE_URLs go to a
+        # single instance so the deletion pass sees the union of the feeds;
+        # one instance per URL would delete the other feeds' events.
         ics_caldav_sync.main()
 
-        assert mock_cls.call_count == 2
-        assert mock_cls.return_value.synchronise.call_count == 2
-        remote_urls = [c.kwargs["remote_url"] for c in mock_cls.call_args_list]
-        assert remote_urls == [
+        mock_cls.assert_called_once()
+        mock_cls.return_value.synchronise.assert_called_once()
+        assert mock_cls.call_args.kwargs["remote_url"] == [
             "https://example.com/a.ics",
             "https://example.com/b.ics",
         ]

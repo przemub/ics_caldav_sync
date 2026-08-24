@@ -33,7 +33,8 @@ class ICSToCalDAV:
     Look no further.
 
     Arguments:
-    * remote_url (str): ICS file URL.
+    * remote_url (str | list[str]): ICS file URL, or a list of URLs whose
+      events are all synced into the one local calendar.
     * local_url (str): CalDAV URL.
     * local_calendar_name (str): The name of your CalDAV calendar.
     * local_username (str): CalDAV username.
@@ -53,7 +54,7 @@ class ICSToCalDAV:
     def __init__(
         self,
         *,
-        remote_url: str,
+        remote_url: str | list[str],
         local_url: str,
         local_calendar_name: str,
         local_username: str,
@@ -85,19 +86,31 @@ class ICSToCalDAV:
             local_calendar_name
         )
 
-        remote_calendar = icalendar.Calendar.from_ical(
-            requests.get(
-                remote_url,
-                auth=self._get_auth(remote_username, remote_password, remote_auth),
-                verify=remote_tls_verify,
-            ).text
-        )
+        if isinstance(remote_url, str):
+            remote_url = [remote_url]
 
-        # Fix timezones
-        self.remote_calendar = x_wr_timezone.to_standard(
-            remote_calendar,
-            self.timezone
-        )
+        # All the feeds are merged into a single remote calendar, so that
+        # synchronise() sees the union of their events: were each feed synced
+        # on its own, the deletion pass would remove the other feeds' events
+        # from the shared local calendar.
+        self.remote_calendar = icalendar.Calendar()
+        for url in remote_url:
+            remote_calendar = icalendar.Calendar.from_ical(
+                requests.get(
+                    url,
+                    auth=self._get_auth(remote_username, remote_password, remote_auth),
+                    verify=remote_tls_verify,
+                ).text
+            )
+
+            # Fix timezones (X-WR-TIMEZONE is a per-file header)
+            remote_calendar = x_wr_timezone.to_standard(
+                remote_calendar,
+                self.timezone
+            )
+
+            for event in remote_calendar.events:
+                self.remote_calendar.add_component(event)
 
         self.sync_all = sync_all
         self.keep_local = keep_local
@@ -388,8 +401,7 @@ def main():
         else:
             next_run = arrow.utcnow().dehumanize(sync_every)
 
-        for remote_url in remote_urls:
-            ICSToCalDAV(remote_url=remote_url, **settings).synchronise()
+        ICSToCalDAV(remote_url=remote_urls, **settings).synchronise()
 
         if next_run is None:
             break
