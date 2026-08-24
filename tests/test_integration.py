@@ -246,15 +246,9 @@ class TestDeletion:
 
 
 class TestRecurrence:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Known bug: a recurring parent and its RECURRENCE-ID override "
-        "share a UID, but synchronise() saves each wrapped event separately to "
-        "<uid>.ics, so the override's PUT overwrites the parent and the whole "
-        "recurring series is lost. They should be stored together in one "
-        "VCALENDAR resource.",
-    )
     def test_recurring_event_and_override_both_survive(self, caldav_url):
+        """A recurring parent and its RECURRENCE-ID override share a UID and
+        must be stored together in one resource, not overwrite each other."""
         syncer = make_syncer(caldav_url)
         syncer.remote_calendar = load_fixture("recurring_with_override.ics")
 

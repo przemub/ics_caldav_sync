@@ -42,7 +42,7 @@ class TestGetAuth:
 class TestWrap:
     def test_wraps_vevent_in_vcalendar(self):
         data = ICSToCalDAV._wrap(
-            make_event(summary="X", uid="1", dtstart=datetime(2025, 1, 1, 12))
+            [make_event(summary="X", uid="1", dtstart=datetime(2025, 1, 1, 12))]
         )
         assert isinstance(data, bytes)
         assert data.startswith(b"BEGIN:VCALENDAR")
@@ -55,15 +55,109 @@ class TestWrap:
         assert data.count(b"BEGIN:VEVENT") == 1
         assert data.rstrip().endswith(b"END:VCALENDAR")
 
+    def test_wraps_multiple_events_in_one_calendar(self):
+        # A recurring parent and its override share a UID and must land in one
+        # resource so neither overwrites the other.
+        parent = make_event(summary="Parent", uid="1", dtstart=datetime(2025, 1, 1, 12))
+        override = make_event(
+            summary="Override", uid="1", dtstart=datetime(2025, 1, 2, 12)
+        )
+        override.add("RECURRENCE-ID", datetime(2025, 1, 2, 12))
+
+        data = ICSToCalDAV._wrap([parent, override])
+
+        assert data.count(b"BEGIN:VCALENDAR") == 1
+        assert data.count(b"BEGIN:VEVENT") == 2
+        assert b"SUMMARY:Parent" in data
+        assert b"SUMMARY:Override" in data
+
     def test_adds_missing_timezone(self):
         data = ICSToCalDAV._wrap(
-            make_event(
-                summary="X",
-                uid="1",
-                dtstart=datetime(2025, 1, 1, 12, tzinfo=ZoneInfo("Europe/Warsaw")),
-            )
+            [
+                make_event(
+                    summary="X",
+                    uid="1",
+                    dtstart=datetime(2025, 1, 1, 12, tzinfo=ZoneInfo("Europe/Warsaw")),
+                )
+            ]
         )
         assert b"BEGIN:VTIMEZONE" in data
+
+
+class TestMatchesStored:
+    @staticmethod
+    def matcher(ignored=()):
+        obj = object.__new__(ICSToCalDAV)
+        obj.ignored_compare_fields = list(ignored)
+        return obj
+
+    @staticmethod
+    def calendar(*events):
+        cal = icalendar.Calendar()
+        for event in events:
+            cal.add_component(event)
+        return cal
+
+    @staticmethod
+    def override(**props):
+        event = make_event(**props)
+        event.add("RECURRENCE-ID", datetime(2025, 1, 2))
+        return event
+
+    def test_identical_single_event_matches(self):
+        stored = self.calendar(make_event(summary="A", uid="1"))
+        assert self.matcher()._matches_stored(stored, [make_event(summary="A", uid="1")])
+
+    def test_changed_event_does_not_match(self):
+        stored = self.calendar(make_event(summary="A", uid="1"))
+        assert not self.matcher()._matches_stored(
+            stored, [make_event(summary="B", uid="1")]
+        )
+
+    def test_differing_event_count_does_not_match(self):
+        # Stored has only the parent; remote adds an override -> mismatch.
+        stored = self.calendar(make_event(summary="A", uid="1"))
+        remote = [make_event(summary="A", uid="1"), self.override(summary="A", uid="1")]
+        assert not self.matcher()._matches_stored(stored, remote)
+
+    def test_parent_and_override_match_regardless_of_order(self):
+        parent = make_event(summary="A", uid="1")
+        override = self.override(summary="B", uid="1")
+        # Stored lists them in the opposite order to the remote group.
+        stored = self.calendar(override, parent)
+        assert self.matcher()._matches_stored(stored, [parent, override])
+
+    def test_vtimezone_subcomponents_are_ignored(self):
+        # add_missing_timezones() can leave a VTIMEZONE in the stored object; it
+        # must not be counted as a VEVENT when matching.
+        event = make_event(
+            summary="A",
+            uid="1",
+            dtstart=datetime(2025, 1, 1, 12, tzinfo=ZoneInfo("Europe/Warsaw")),
+        )
+        stored = self.calendar(event)
+        stored.add_missing_timezones()
+        assert any(c.name == "VTIMEZONE" for c in stored.subcomponents)
+        assert self.matcher()._matches_stored(stored, [event])
+
+    def test_respects_ignored_compare_fields(self):
+        stored = self.calendar(
+            make_event(summary="A", uid="1", dtstamp=datetime(2025, 1, 1))
+        )
+        remote = [make_event(summary="A", uid="1", dtstamp=datetime(2025, 6, 1))]
+        assert self.matcher(["DTSTAMP"])._matches_stored(stored, remote)
+        assert not self.matcher()._matches_stored(stored, remote)
+
+
+class TestUpdateCapturedNow:
+    def test_captured_nows_match_their_names(self):
+        # _is_past compares aware event ends against _now_aware; if it were
+        # naive, the comparison would raise TypeError.
+        obj = object.__new__(ICSToCalDAV)
+        obj._update_captured_now()
+        assert obj._now_aware.tzinfo is not None
+        assert obj._now_aware.tzinfo.utcoffset(obj._now_aware) is not None
+        assert obj._now_naive.tzinfo is None
 
 
 def make_local_event(uid):

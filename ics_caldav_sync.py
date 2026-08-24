@@ -104,6 +104,14 @@ class ICSToCalDAV:
 
         self.ignored_compare_fields = ignored_compare_fields.split(" ") if ignored_compare_fields else []
 
+        self._update_captured_now()
+
+    def _update_captured_now(self):
+        """Captures reference time for _is_past."""
+        self._now_naive: datetime.datetime = datetime.datetime.now()
+        self._now_aware: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
+        self._today: datetime.date = datetime.date.today()
+
     @staticmethod
     def _get_auth(username: str, password: str, method: AuthenticationMethod) -> requests.auth.AuthBase:
         """
@@ -162,18 +170,64 @@ class ICSToCalDAV:
         return local_event == remote_event
 
     @staticmethod
-    def _wrap(vevent: icalendar.Event) -> bytes:
+    def _recurrence_key(event: icalendar.Component) -> bytes:
         """
-        Since CalDAV expects a VEVENT in a VCALENDAR,
-        we need to wrap each event pulled from a single ICS
-        into its own calendar.
-        This is then serialized, so it's ready to be sent
-        via CalDAV.
+        A sort/identity key for an event within a UID group: the empty bytes
+        for the recurring parent, the serialized RECURRENCE-ID for an override.
+        """
+        recurrence_id = event.get("RECURRENCE-ID")
+        return recurrence_id.to_ical() if recurrence_id is not None else b""
+
+    def _is_past(self, event: icalendar.Component) -> bool:
+        """
+        Whether an event has already ended, comparing its end against the
+        matching "now" captured at the start of synchronise(): a date, or a
+        naive- or aware- datetime.
+        https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
+        """
+        end = event.end
+        if isinstance(end, datetime.date) and not isinstance(end, datetime.datetime):
+            return self._today > end
+        if end.tzinfo is not None and end.tzinfo.utcoffset(end) is not None:
+            return self._now_aware > end
+        return self._now_naive > end
+
+    def _matches_stored(
+        self,
+        stored: icalendar.Calendar,
+        remote_events: list[icalendar.Component],
+    ) -> bool:
+        """
+        Whether the VEVENTs already stored for a UID are identical (modulo
+        ignored_compare_fields) to the ones we would write, so the save can
+        be skipped.
+        """
+        stored_events = sorted(
+            (c for c in stored.subcomponents if c.name == "VEVENT"),
+            key=self._recurrence_key,
+        )
+        remote_events = sorted(remote_events, key=self._recurrence_key)
+        if len(stored_events) != len(remote_events):
+            return False
+        return all(
+            self._compare(s, r) for s, r in zip(stored_events, remote_events)
+        )
+
+    @staticmethod
+    def _wrap(vevents: list[icalendar.Component]) -> bytes:
+        """
+        Since CalDAV expects VEVENTs in a VCALENDAR, we wrap the events pulled
+        from a single ICS into one calendar.
+        All components sharing a UID (a recurring event and its RECURRENCE-ID
+        overrides) must go into the same resource; saving them separately to
+        <uid>.ics would make each overwrite the previous one.
+        This is then serialized, so it's ready to be sent via CalDAV.
         """
         calendar = icalendar.Calendar(
             prodid="-//Chihiro Software Ltd//NONSGML Calendar sync//EN"
         )
-        calendar.add_component(vevent)
+        for vevent in vevents:
+            calendar.add_component(vevent)
         calendar.add_missing_timezones()
 
         data = calendar.to_ical()
@@ -193,46 +247,44 @@ class ICSToCalDAV:
         """
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{timestamp}] Starting sync...", flush=True)
-        now_naive = datetime.datetime.now()
-        now_aware = datetime.datetime.now(datetime.timezone.utc)
-        today = datetime.date.today()
 
-        # ICS files give no ordering guarantee, but a recurrence override
-        # (an event with RECURRENCE-ID) can only be saved after its parent
-        # recurring event exists locally. Sort so parents come first; the
-        # sort is stable, so the original order is otherwise preserved.
-        sorted_remote_events = sorted(
-            self.remote_calendar.events,
-            key=lambda event: event.get("RECURRENCE-ID") is not None,
-        )
-        for remote_event in sorted_remote_events:
-            # Skip events in the past, unless requested not to.
-            if not self.sync_all:
-                end = remote_event.end
-                # Compare against date, or naive- or aware- datetime
-                # https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
-                if isinstance(end, datetime.date) and not isinstance(end, datetime.datetime):
-                    if today > end:
-                        continue
-                elif end.tzinfo is not None and end.tzinfo.utcoffset(end) is not None:
-                    if now_aware > end:
-                        continue
-                else:
-                    if now_naive > end:
-                        continue
+        self._update_captured_now()
 
-            # If the event already exists and is what we would write, skip.
+        # ICS files give no ordering guarantee. Group events by UID so that a
+        # recurring event and its RECURRENCE-ID overrides are written into a
+        # single CalDAV resource; saving them separately to <uid>.ics would
+        # make each overwrite the previous one.
+        events_by_uid: dict[str, list[icalendar.Component]] = {}
+        for remote_event in self.remote_calendar.events:
+            uid = remote_event.get("UID")
+            if uid is None:
+                # RFC 5545 requires a UID, but some exporters omit it. Without
+                # one we cannot address the event on the CalDAV server.
+                logger.warning(
+                    "Skipping an event with no UID: %s",
+                    remote_event.get("SUMMARY", "(no summary)"),
+                )
+                continue
+            events_by_uid.setdefault(uid, []).append(remote_event)
+
+        for uid, events in events_by_uid.items():
+            # Skip the group if every event in it is in the past, unless
+            # requested not to.
+            if not self.sync_all and all(self._is_past(event) for event in events):
+                continue
+
+            # If what is already stored is what we would write, skip.
             try:
-                local_event = self.local_calendar.get_event_by_uid(remote_event.uid).icalendar_component
-                if self._compare(local_event, remote_event):
-                    logger.debug("Skipping event [%s] as it is identical", remote_event.uid)
+                stored = self.local_calendar.get_event_by_uid(uid).icalendar_instance
+                if self._matches_stored(stored, events):
+                    logger.debug("Skipping event [%s] as it is identical", uid)
                     continue
             except caldav.lib.error.NotFoundError:
                 pass
 
-            # All checks passed, save the event
+            # All checks passed, save the event(s).
             try:
-                self.local_calendar.save_event(self._wrap(remote_event))
+                self.local_calendar.save_event(self._wrap(events))
             except vobject.base.ValidateError:
                 logger.exception("Invalid event was downloaded from the remote. It will be skipped.")
             except caldav.lib.error.PutError as e:
@@ -243,7 +295,7 @@ class ICSToCalDAV:
                 # echoes back in the response body. This is server-dependent
                 # and may not catch the same condition on non-sabre servers.
                 if "NoInstancesException" in str(e):
-                    logger.warning("Skipping event with no valid recurrence instances: %s", remote_event.uid)
+                    logger.warning("Skipping event with no valid recurrence instances: %s", uid)
                 else:
                     raise
             print("+", end="")
@@ -253,8 +305,7 @@ class ICSToCalDAV:
 
         if not self.keep_local:
             # Delete local events that don't exist in the remote
-            remote_events_ids = set(e["UID"] for e in self.remote_calendar.events)
-            events_to_delete = self._get_local_events_ids() - remote_events_ids
+            events_to_delete = self._get_local_events_ids() - set(events_by_uid)
             for local_event_id in events_to_delete:
                 self.local_client.delete(
                     f"{self.local_calendar.url}{local_event_id}.ics"
