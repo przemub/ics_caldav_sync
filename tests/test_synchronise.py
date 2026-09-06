@@ -18,7 +18,7 @@ def make_event(**props) -> icalendar.Event:
 
 
 def stored_instance(*events) -> icalendar.Calendar:
-    """Build the VCALENDAR that get_event_by_uid(...).icalendar_instance would
+    """Build the VCALENDAR that event_by_uid(...).icalendar_instance would
     return for an event already stored on the server."""
     calendar = icalendar.Calendar()
     for event in events:
@@ -43,7 +43,7 @@ class TestSynchroniseUsesCompare:
         remote = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 1, 1))
         local = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
-        syncer.local_calendar.get_event_by_uid.return_value.icalendar_instance = (
+        syncer.local_calendar.event_by_uid.return_value.icalendar_instance = (
             stored_instance(local)
         )
 
@@ -54,7 +54,7 @@ class TestSynchroniseUsesCompare:
     def test_saves_new_event(self, syncer):
         event = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[event])
-        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+        syncer.local_calendar.event_by_uid.side_effect = caldav.lib.error.NotFoundError
 
         syncer.synchronise()
 
@@ -64,7 +64,7 @@ class TestSynchroniseUsesCompare:
         remote = make_event(summary="Updated", uid="123", dtstamp=datetime(2025, 1, 1))
         local = make_event(summary="Original", uid="123", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
-        syncer.local_calendar.get_event_by_uid.return_value.icalendar_instance = (
+        syncer.local_calendar.event_by_uid.return_value.icalendar_instance = (
             stored_instance(local)
         )
 
@@ -78,7 +78,7 @@ class TestSynchroniseUsesCompare:
         a = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 1, 1))
         b = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 6, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[a])
-        syncer.local_calendar.get_event_by_uid.return_value.icalendar_instance = (
+        syncer.local_calendar.event_by_uid.return_value.icalendar_instance = (
             stored_instance(b)
         )
 
@@ -92,7 +92,7 @@ class TestSynchroniseUsesCompare:
         remote = make_event(summary="Updated", uid="123", dtstamp=datetime(2025, 1, 1))
         local = make_event(summary="Original", uid="123", dtstamp=datetime(2025, 6, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
-        syncer.local_calendar.get_event_by_uid.return_value.icalendar_instance = (
+        syncer.local_calendar.event_by_uid.return_value.icalendar_instance = (
             stored_instance(local)
         )
 
@@ -110,7 +110,7 @@ class TestSynchroniseGroupsRecurrence:
         override = make_event(summary="Override", uid="123", dtstamp=datetime(2025, 1, 1))
         override.add("RECURRENCE-ID", datetime(2025, 1, 2))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[override, parent])
-        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+        syncer.local_calendar.event_by_uid.side_effect = caldav.lib.error.NotFoundError
 
         syncer.synchronise()
 
@@ -239,7 +239,7 @@ class TestSynchronisePastEventFiltering:
     def _run(self, syncer, *events):
         syncer.sync_all = False
         type(syncer.remote_calendar).events = PropertyMock(return_value=list(events))
-        syncer.local_calendar.get_event_by_uid.side_effect = (
+        syncer.local_calendar.event_by_uid.side_effect = (
             caldav.lib.error.NotFoundError
         )
         syncer.synchronise()
@@ -301,7 +301,7 @@ class TestSynchroniseDeleteBranch:
         syncer.keep_local = False
         remote = make_event(summary="Kept", uid="A", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
-        syncer.local_calendar.get_event_by_uid.side_effect = (
+        syncer.local_calendar.event_by_uid.side_effect = (
             caldav.lib.error.NotFoundError
         )
         # Local has A (in remote) and B (stale) -> only B should be deleted.
@@ -320,7 +320,7 @@ class TestSynchroniseDeleteBranch:
         syncer.keep_local = False
         remote = make_event(summary="Kept", uid="A", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[remote])
-        syncer.local_calendar.get_event_by_uid.side_effect = (
+        syncer.local_calendar.event_by_uid.side_effect = (
             caldav.lib.error.NotFoundError
         )
         syncer._get_local_events_ids = MagicMock(return_value={"A"})
@@ -338,7 +338,7 @@ class TestSynchroniseUidlessEvent:
         uidless = make_event(summary="NoUid", dtstamp=datetime(2025, 1, 1))
         good = make_event(summary="Good", uid="A", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[uidless, good])
-        syncer.local_calendar.get_event_by_uid.side_effect = (
+        syncer.local_calendar.event_by_uid.side_effect = (
             caldav.lib.error.NotFoundError
         )
         syncer.keep_local = False
@@ -360,7 +360,7 @@ class TestSynchroniseValidateError:
         a = make_event(summary="Bad", uid="A", dtstamp=datetime(2025, 1, 1))
         b = make_event(summary="AlsoBad", uid="B", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[a, b])
-        syncer.local_calendar.get_event_by_uid.side_effect = (
+        syncer.local_calendar.event_by_uid.side_effect = (
             caldav.lib.error.NotFoundError
         )
         syncer.local_calendar.save_event.side_effect = vobject.base.ValidateError(
@@ -378,7 +378,7 @@ class TestSynchroniseHandlesPutError:
         """A sabre/dav NoInstancesException is logged and skipped, not fatal."""
         event = make_event(summary="Empty rule", uid="123", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[event])
-        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+        syncer.local_calendar.event_by_uid.side_effect = caldav.lib.error.NotFoundError
         syncer.local_calendar.save_event.side_effect = caldav.lib.error.PutError(
             "400 Bad Request\n\n<s:exception>Sabre\\VObject\\Recur\\NoInstancesException</s:exception>"
         )
@@ -392,7 +392,7 @@ class TestSynchroniseHandlesPutError:
         """A PutError that is not a NoInstancesException must still be fatal."""
         event = make_event(summary="Meeting", uid="123", dtstamp=datetime(2025, 1, 1))
         type(syncer.remote_calendar).events = PropertyMock(return_value=[event])
-        syncer.local_calendar.get_event_by_uid.side_effect = caldav.lib.error.NotFoundError
+        syncer.local_calendar.event_by_uid.side_effect = caldav.lib.error.NotFoundError
         syncer.local_calendar.save_event.side_effect = caldav.lib.error.PutError(
             "403 Forbidden\n\nPermission denied"
         )

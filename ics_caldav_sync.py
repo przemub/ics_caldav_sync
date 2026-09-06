@@ -288,7 +288,7 @@ class ICSToCalDAV:
 
             # If what is already stored is what we would write, skip.
             try:
-                stored = self.local_calendar.get_event_by_uid(uid).icalendar_instance
+                stored = self.local_calendar.event_by_uid(uid).icalendar_instance
                 if self._matches_stored(stored, events):
                     logger.debug("Skipping event [%s] as it is identical", uid)
                     continue
