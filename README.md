@@ -68,9 +68,22 @@ sync = ICSToCalDAVSync(
     # keep_local=False
     # timezone=None,
     # ignored_compare_fields=[]
+    # event_filter=None,
 )
 
 sync.synchronise()
+```
+
+`event_filter` can be used to ignore events. It receives each downloaded
+`icalendar` VEVENT and should return `True` for events to synchronize. Filtered
+events are left out of synchronization and do not cause matching local events
+to be deleted:
+
+```python
+sync = ICSToCalDAV(
+    # ...required connection settings...
+    event_filter=lambda event: not event.get("SUMMARY", "").startswith("[Private]"),
+)
 ```
 
 ## Examples
