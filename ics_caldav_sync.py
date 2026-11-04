@@ -7,6 +7,7 @@ import pathlib
 import sys
 import time
 from copy import copy
+from collections.abc import Callable
 from typing import Literal
 
 import arrow
@@ -50,6 +51,8 @@ class ICSToCalDAV:
     * keep_local (bool, optional): Do not delete events on the CalDAV server that do not exist in the ICS file.
     * timezone (str, optional): Override events timezone. See: https://dateutil.readthedocs.io/en/stable/tz.html
     * ignored_compare_fields(str, optional): Fields that are ignored when checking if an event needs to be updated.
+    * event_filter (Callable, optional): Callback returning True for events
+      that should be synchronized. It receives each icalendar VEVENT.
     """
 
     def __init__(
@@ -70,6 +73,7 @@ class ICSToCalDAV:
         keep_local: bool = False,
         timezone: str | None = None,
         ignored_compare_fields: str | None = None,
+        event_filter: Callable[[icalendar.Component], bool] | None = None,
     ):
         self.timezone = dateutil.tz.gettz(timezone) \
             if timezone is not None else None
@@ -115,6 +119,7 @@ class ICSToCalDAV:
 
         self.sync_all = sync_all
         self.keep_local = keep_local
+        self.event_filter = event_filter
 
         self.ignored_compare_fields = ignored_compare_fields.split(" ") if ignored_compare_fields else []
 
@@ -268,7 +273,18 @@ class ICSToCalDAV:
         # single CalDAV resource; saving them separately to <uid>.ics would
         # make each overwrite the previous one.
         events_by_uid: dict[str, list[icalendar.Component]] = {}
+        filtered_event_uids: set[str] = set()
+        event_filter = getattr(self, "event_filter", None)
         for remote_event in self.remote_calendar.events:
+            if event_filter is not None and not event_filter(remote_event):
+                uid = remote_event.get("UID")
+                if uid is not None:
+                    filtered_event_uids.add(uid)
+                logger.debug(
+                    "Skipping filtered event [%s]",
+                    uid or "(no UID)",
+                )
+                continue
             uid = remote_event.get("UID")
             if uid is None:
                 # RFC 5545 requires a UID, but some exporters omit it. Without
@@ -318,7 +334,11 @@ class ICSToCalDAV:
 
         if not self.keep_local:
             # Delete local events that don't exist in the remote
-            events_to_delete = self._get_local_events_ids() - set(events_by_uid)
+            events_to_delete = (
+                self._get_local_events_ids()
+                - set(events_by_uid)
+                - filtered_event_uids
+            )
             for local_event_id in events_to_delete:
                 self.local_client.delete(
                     f"{self.local_calendar.url}{local_event_id}.ics"

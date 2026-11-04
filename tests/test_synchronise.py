@@ -35,6 +35,7 @@ def syncer():
     obj.local_calendar = MagicMock()
     obj.local_client = MagicMock()
     obj.remote_calendar = MagicMock()
+    obj.event_filter = None
     return obj
 
 
@@ -328,6 +329,49 @@ class TestSynchroniseDeleteBranch:
         syncer.synchronise()
 
         syncer.local_client.delete.assert_not_called()
+
+
+class TestSynchroniseEventFilter:
+    def test_filters_events_before_synchronising(self, syncer):
+        included = make_event(summary="Keep", uid="A", dtstamp=datetime(2025, 1, 1))
+        excluded = make_event(summary="Ignore: private", uid="B", dtstamp=datetime(2025, 1, 1))
+        seen = []
+        syncer.event_filter = lambda event: seen.append(event) or not event["SUMMARY"].startswith("Ignore:")
+        type(syncer.remote_calendar).events = PropertyMock(
+            return_value=[included, excluded]
+        )
+        syncer.local_calendar.get_event_by_uid.side_effect = (
+            caldav.lib.error.NotFoundError
+        )
+
+        syncer.synchronise()
+
+        assert seen == [included, excluded]
+        assert syncer.local_calendar.save_event.call_count == 1
+        payload = syncer.local_calendar.save_event.call_args.args[0]
+        assert b"SUMMARY:Keep" in payload
+        assert b"SUMMARY:Ignore: private" not in payload
+
+    def test_filtered_events_are_not_deleted(self, syncer):
+        syncer.keep_local = False
+        included = make_event(summary="Keep", uid="A", dtstamp=datetime(2025, 1, 1))
+        excluded = make_event(summary="Ignore", uid="B", dtstamp=datetime(2025, 1, 1))
+        syncer.event_filter = lambda event: event["SUMMARY"] != "Ignore"
+        type(syncer.remote_calendar).events = PropertyMock(
+            return_value=[included, excluded]
+        )
+        syncer.local_calendar.get_event_by_uid.side_effect = (
+            caldav.lib.error.NotFoundError
+        )
+        syncer._get_local_events_ids = MagicMock(return_value={"A", "B", "C"})
+
+        syncer.synchronise()
+
+        deleted_urls = [
+            call.args[0] for call in syncer.local_client.delete.call_args_list
+        ]
+        assert any("C.ics" in url for url in deleted_urls)
+        assert all("B.ics" not in url for url in deleted_urls)
 
 
 class TestSynchroniseUidlessEvent:
